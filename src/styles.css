@@ -622,6 +622,11 @@ textarea::placeholder {
   transform: none;
 }
 
+.icon-button.listening {
+  border-color: rgba(45, 212, 191, 0.72);
+  background: rgba(20, 184, 166, 0.16);
+}
+
 .cue-list {
   display: grid;
   gap: 8px;
@@ -942,6 +947,60 @@ textarea::placeholder {
   color: #e2e8f0;
   font-size: 13px;
   line-height: 1.35;
+}
+
+.stage-cue-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.stage-cue-form {
+  display: grid;
+  gap: 10px;
+}
+
+.stage-cue-form textarea {
+  min-height: 94px;
+}
+
+.stage-intent-note {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(45, 212, 191, 0.22);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(20, 184, 166, 0.07);
+}
+
+.stage-intent-note span {
+  color: #5eead4;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.stage-intent-note strong {
+  color: #f8fafc;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.stage-history-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage-history-list li {
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quality-toggle {

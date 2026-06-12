@@ -6,26 +6,8 @@ import { LiveCanvas } from './components/LiveCanvas';
 import { Timeline } from './components/Timeline';
 import { createInitialRuntime, runtimeReducer } from './domain/runtime';
 import { getMoment, omniVyxShow } from './domain/showGraph';
+import { getSpeechRecognition, type SpeechRecognitionLike } from './domain/speechRecognition';
 import { VisualEngineProof } from './visual-engine/VisualEngineProof';
-
-type SpeechRecognitionLike = {
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((event: { results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-
-type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
-
-function getSpeechRecognition(): SpeechRecognitionCtor | null {
-  const speechWindow = window as typeof window & {
-    SpeechRecognition?: SpeechRecognitionCtor;
-    webkitSpeechRecognition?: SpeechRecognitionCtor;
-  };
-  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition ?? null;
-}
 
 export function App() {
   const [surface, setSurface] = useState<'visual-engine' | 'presenter'>('visual-engine');
