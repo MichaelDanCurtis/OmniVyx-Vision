@@ -6,6 +6,7 @@ import { LiveCanvas } from './components/LiveCanvas';
 import { Timeline } from './components/Timeline';
 import { createInitialRuntime, runtimeReducer } from './domain/runtime';
 import { getMoment, omniVyxShow } from './domain/showGraph';
+import { VisualEngineProof } from './visual-engine/VisualEngineProof';
 
 type SpeechRecognitionLike = {
   continuous: boolean;
@@ -27,6 +28,39 @@ function getSpeechRecognition(): SpeechRecognitionCtor | null {
 }
 
 export function App() {
+  const [surface, setSurface] = useState<'visual-engine' | 'presenter'>('visual-engine');
+
+  return (
+    <main className="app-shell" data-surface={surface}>
+      <header className="topbar">
+        <div>
+          <p className="eyebrow">OmniVyx</p>
+          <h1>{surface === 'visual-engine' ? 'Visual Engine' : omniVyxShow.title}</h1>
+        </div>
+        <nav className="surface-switcher" aria-label="OmniVyx surfaces">
+          <button
+            className={surface === 'visual-engine' ? 'active' : ''}
+            type="button"
+            onClick={() => setSurface('visual-engine')}
+          >
+            Visual Engine
+          </button>
+          <button
+            className={surface === 'presenter' ? 'active' : ''}
+            type="button"
+            onClick={() => setSurface('presenter')}
+          >
+            Presenter MVP
+          </button>
+        </nav>
+      </header>
+
+      {surface === 'visual-engine' ? <VisualEngineProof /> : <PresenterMvp />}
+    </main>
+  );
+}
+
+function PresenterMvp() {
   const show = omniVyxShow;
   const [runtime, dispatch] = useReducer(
     (state: ReturnType<typeof createInitialRuntime>, action: Parameters<typeof runtimeReducer>[1]) =>
@@ -75,17 +109,13 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">OmniVyx Live Presenter</p>
-          <h1>{show.title}</h1>
-        </div>
+    <>
+      <section className="presenter-status-row">
         <div className="topbar-status">
           <span className={listening ? 'status-dot listening' : 'status-dot'} />
           <span>{listening ? 'listening' : runtime.isHolding ? 'holding' : 'ready'}</span>
         </div>
-      </header>
+      </section>
 
       <section className="presenter-layout">
         <LiveCanvas show={show} moment={activeMoment} runtime={runtime} />
@@ -152,7 +182,6 @@ export function App() {
         activeMomentId={runtime.activeMomentId}
         onSelect={(momentId) => dispatch({ type: 'jump', momentId })}
       />
-    </main>
+    </>
   );
 }
-
