@@ -1,4 +1,5 @@
 import { Gauge, Mic, MicOff, Pause, Play, Send, Sparkles } from 'lucide-react';
+import type { PresenterReceipt } from '../native/presenterBridge';
 import type { StageIntentMatch } from './stageIntent';
 import {
   getStageEventMeta,
@@ -11,6 +12,7 @@ import {
 interface StageControlsProps {
   canUseMic: boolean;
   lastIntent: StageIntentMatch | null;
+  lastNativeReceipt: PresenterReceipt | null;
   listening: boolean;
   state: StageState;
   transcript: string;
@@ -25,6 +27,7 @@ interface StageControlsProps {
 export function StageControls({
   canUseMic,
   lastIntent,
+  lastNativeReceipt,
   listening,
   state,
   transcript,
@@ -78,6 +81,10 @@ export function StageControls({
           <div>
             <dt>Last intent</dt>
             <dd>{lastIntent ? `${lastIntent.label} / ${formatIntentSource(lastIntent.source)}` : 'none'}</dd>
+          </div>
+          <div>
+            <dt>Native intake</dt>
+            <dd>{lastNativeReceipt ? `accepted #${lastNativeReceipt.sequence}` : 'standing by'}</dd>
           </div>
         </dl>
       </section>

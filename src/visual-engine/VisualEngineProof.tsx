@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { getSpeechRecognition, type SpeechRecognitionLike } from '../domain/speechRecognition';
+import {
+  acceptPresenterSignal,
+  type PresenterReceipt,
+} from '../native/presenterBridge';
 import { LaunchStage } from './LaunchStage';
 import { StageControls } from './StageControls';
 import { findStageIntent, type StageIntentMatch } from './stageIntent';
@@ -16,6 +20,7 @@ export function VisualEngineProof() {
   const [transcript, setTranscript] = useState('');
   const [transcriptHistory, setTranscriptHistory] = useState<string[]>([]);
   const [lastIntent, setLastIntent] = useState<StageIntentMatch | null>(null);
+  const [lastNativeReceipt, setLastNativeReceipt] = useState<PresenterReceipt | null>(null);
   const [listening, setListening] = useState(false);
   const [recognition, setRecognition] = useState<SpeechRecognitionLike | null>(null);
   const canUseMic = typeof window !== 'undefined' && getSpeechRecognition() !== null;
@@ -33,6 +38,19 @@ export function VisualEngineProof() {
     if (!trimmed) return;
 
     const intent = findStageIntent(trimmed, stageState.activeEvent, stageState.previousEvent);
+    const occurredAtMs = Date.now();
+    void acceptPresenterSignal({
+      signalId: createSignalId(),
+      showId: 'omnivyx-launch-proof',
+      kind: intent ? 'intentCandidate' : 'transcriptFinal',
+      transcript: trimmed,
+      occurredAtMs,
+    })
+      .then((receipt) => {
+        if (receipt) setLastNativeReceipt(receipt);
+      })
+      .catch(() => undefined);
+
     setLastIntent(intent);
     setTranscriptHistory((current) => [trimmed, ...current].slice(0, 4));
     setTranscript('');
@@ -78,6 +96,7 @@ export function VisualEngineProof() {
         <StageControls
           canUseMic={canUseMic}
           lastIntent={lastIntent}
+          lastNativeReceipt={lastNativeReceipt}
           listening={listening}
           state={stageState}
           transcript={transcript}
@@ -91,4 +110,9 @@ export function VisualEngineProof() {
       </div>
     </section>
   );
+}
+
+function createSignalId(): string {
+  return globalThis.crypto?.randomUUID?.()
+    ?? `signal-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

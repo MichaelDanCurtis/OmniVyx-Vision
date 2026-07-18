@@ -61,6 +61,31 @@ button {
   line-height: 0.88;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kernel-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: rgba(2, 6, 23, 0.54);
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.kernel-status.native {
+  border-color: rgba(45, 212, 191, 0.42);
+  color: #99f6e4;
+}
+
 .topbar-status {
   display: inline-flex;
   align-items: center;
@@ -1149,6 +1174,17 @@ textarea::placeholder {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kernel-status {
+    justify-content: center;
+    width: 100%;
   }
 
   .surface-switcher,

@@ -1,5 +1,5 @@
-import { useMemo, useReducer, useState } from 'react';
-import { Mic, MicOff, RotateCcw, Send } from 'lucide-react';
+import { useEffect, useMemo, useReducer, useState } from 'react';
+import { Cpu, Mic, MicOff, RotateCcw, Send } from 'lucide-react';
 import { Controls } from './components/Controls';
 import { CuePanel } from './components/CuePanel';
 import { LiveCanvas } from './components/LiveCanvas';
@@ -7,10 +7,25 @@ import { Timeline } from './components/Timeline';
 import { createInitialRuntime, runtimeReducer } from './domain/runtime';
 import { getMoment, omniVyxShow } from './domain/showGraph';
 import { getSpeechRecognition, type SpeechRecognitionLike } from './domain/speechRecognition';
+import {
+  getPresenterCapabilities,
+  type PresenterCapabilities,
+} from './native/presenterBridge';
 import { VisualEngineProof } from './visual-engine/VisualEngineProof';
 
 export function App() {
   const [surface, setSurface] = useState<'visual-engine' | 'presenter'>('visual-engine');
+  const [capabilities, setCapabilities] = useState<PresenterCapabilities | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    void getPresenterCapabilities().then((nextCapabilities) => {
+      if (mounted) setCapabilities(nextCapabilities);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <main className="app-shell" data-surface={surface}>
@@ -19,22 +34,31 @@ export function App() {
           <p className="eyebrow">OmniVyx</p>
           <h1>{surface === 'visual-engine' ? 'Visual Engine' : omniVyxShow.title}</h1>
         </div>
-        <nav className="surface-switcher" aria-label="OmniVyx surfaces">
-          <button
-            className={surface === 'visual-engine' ? 'active' : ''}
-            type="button"
-            onClick={() => setSurface('visual-engine')}
+        <div className="topbar-actions">
+          <div
+            className={capabilities?.nativeShell ? 'kernel-status native' : 'kernel-status'}
+            title={capabilities?.kernelVersion ?? 'Detecting presenter runtime'}
           >
-            Visual Engine
-          </button>
-          <button
-            className={surface === 'presenter' ? 'active' : ''}
-            type="button"
-            onClick={() => setSurface('presenter')}
-          >
-            Presenter MVP
-          </button>
-        </nav>
+            <Cpu size={15} />
+            <span>{capabilities?.nativeShell ? 'Presenter Kernel' : 'Web fallback'}</span>
+          </div>
+          <nav className="surface-switcher" aria-label="OmniVyx surfaces">
+            <button
+              className={surface === 'visual-engine' ? 'active' : ''}
+              type="button"
+              onClick={() => setSurface('visual-engine')}
+            >
+              Visual Engine
+            </button>
+            <button
+              className={surface === 'presenter' ? 'active' : ''}
+              type="button"
+              onClick={() => setSurface('presenter')}
+            >
+              Presenter MVP
+            </button>
+          </nav>
+        </div>
       </header>
 
       {surface === 'visual-engine' ? <VisualEngineProof /> : <PresenterMvp />}
