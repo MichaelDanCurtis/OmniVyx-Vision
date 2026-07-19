@@ -1058,6 +1058,14 @@ textarea::placeholder {
   width: min(390px, 36vw);
 }
 
+.visual-engine-proof.presenting .stage-evidence-readout > strong {
+  font-size: 17px;
+}
+
+.visual-engine-proof.presenting .stage-evidence-metric b {
+  font-size: 72px;
+}
+
 @keyframes stageMetaEnter {
   from {
     opacity: 0;
@@ -1212,12 +1220,46 @@ textarea::placeholder {
 
 .stage-evidence-metric b {
   color: #f8fafc;
-  font-size: clamp(42px, 5vw, 62px);
+  font-size: 62px;
   font-weight: 520;
   line-height: 0.9;
 }
 
-.stage-evidence-metric span {
+.stage-evidence-value {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.stage-evidence-glyph-mask {
+  display: inline-flex;
+  overflow: hidden;
+  padding: 0.08em 0 0.04em;
+}
+
+.stage-evidence-glyph {
+  display: block;
+  opacity: 0;
+  filter: blur(5px);
+  transform: translate3d(0, 112%, 0) rotateX(-32deg);
+  transform-origin: center bottom;
+  transition:
+    opacity 240ms ease calc(var(--evidence-glyph-index, 0) * 52ms + 70ms),
+    filter 420ms ease calc(var(--evidence-glyph-index, 0) * 52ms + 70ms),
+    transform 520ms cubic-bezier(0.16, 1, 0.3, 1)
+      calc(var(--evidence-glyph-index, 0) * 52ms + 70ms);
+}
+
+.stage-evidence-glyph[data-symbol="true"] {
+  font-size: 0.72em;
+}
+
+.stage-evidence-readout.visible .stage-evidence-glyph {
+  opacity: 1;
+  filter: blur(0);
+  transform: translate3d(0, 0, 0) rotateX(0);
+}
+
+.stage-evidence-metric > span {
   max-width: 90px;
   color: rgba(226, 232, 240, 0.66);
   font-size: 10px;
@@ -1248,9 +1290,27 @@ textarea::placeholder {
     transform 420ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--evidence-index, 0) * 55ms + 90ms);
 }
 
+.stage-evidence-series li::after {
+  content: "";
+  width: 100%;
+  height: 1px;
+  margin-top: 3px;
+  background: linear-gradient(90deg, var(--stage-primary, #22d3ee), var(--stage-accent, #fde68a));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--stage-primary, #22d3ee) 38%, transparent);
+  opacity: 0.74;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1)
+    calc(var(--evidence-index, 0) * 55ms + 160ms);
+}
+
 .stage-evidence-readout.visible .stage-evidence-series li {
   opacity: 1;
   transform: translate3d(0, 0, 0);
+}
+
+.stage-evidence-readout.visible .stage-evidence-series li::after {
+  transform: scaleX(var(--evidence-value, 0));
 }
 
 .stage-evidence-series li:first-child {
@@ -1710,7 +1770,9 @@ textarea::placeholder {
   .visual-engine-copy p:not(.eyebrow),
   .stage-evidence-readout,
   .stage-evidence-readout::before,
-  .stage-evidence-series li {
+  .stage-evidence-glyph,
+  .stage-evidence-series li,
+  .stage-evidence-series li::after {
     animation: none;
     transition: none;
   }

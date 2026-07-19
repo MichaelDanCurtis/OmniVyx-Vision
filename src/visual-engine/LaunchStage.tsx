@@ -98,6 +98,7 @@ const OPTICAL_PANEL_LAYOUT = [
 ] as const;
 
 const EVIDENCE_HEIGHTS = normalizeEvidenceValues(launchEvidence);
+const EVIDENCE_METRIC_GLYPHS = Array.from(launchEvidence.metric);
 const EVIDENCE_COLUMN_X = new Float32Array([-0.87, -0.29, 0.29, 0.87]);
 const EVIDENCE_BASE_Y = -0.78;
 const EVIDENCE_COLUMN_PHASES = new Float32Array([0, 0.22, 0.44, 0.66]);
@@ -483,12 +484,30 @@ function EvidenceReadout({ visible }: { visible: boolean }) {
       </div>
       <strong>{launchEvidence.title}</strong>
       <div className="stage-evidence-metric">
-        <b>{launchEvidence.metric}</b>
+        <b aria-label={launchEvidence.metric} className="stage-evidence-value">
+          {EVIDENCE_METRIC_GLYPHS.map((glyph, index) => (
+            <span className="stage-evidence-glyph-mask" key={`${glyph}-${index}`} aria-hidden="true">
+              <span
+                className="stage-evidence-glyph"
+                data-symbol={!/\d/.test(glyph) || undefined}
+                style={{ '--evidence-glyph-index': index } as CSSProperties}
+              >
+                {glyph}
+              </span>
+            </span>
+          ))}
+        </b>
         <span>{launchEvidence.metricLabel}</span>
       </div>
       <ol className="stage-evidence-series">
         {launchEvidence.points.map((point, index) => (
-          <li key={point.label} style={{ '--evidence-index': index } as CSSProperties}>
+          <li
+            key={point.label}
+            style={{
+              '--evidence-index': index,
+              '--evidence-value': EVIDENCE_HEIGHTS[index],
+            } as CSSProperties}
+          >
             <small>{point.label}</small>
             <b>{point.displayValue}</b>
           </li>
@@ -1844,6 +1863,7 @@ const evidenceColumnFragmentShader = /* glsl */ `
   uniform vec3 uPrimary;
   uniform vec3 uSecondary;
   uniform float uTime;
+  uniform float uVoice;
   varying float vHeight;
   varying float vPhase;
   varying vec3 vNormal;
@@ -1854,12 +1874,17 @@ const evidenceColumnFragmentShader = /* glsl */ `
     vec3 viewDirection = normalize(-vViewPosition);
     float fresnel = pow(1.0 - clamp(abs(dot(normal, viewDirection)), 0.0, 1.0), 1.75);
     float vertical = smoothstep(0.0, 1.0, vHeight);
-    float scanWave = sin(vHeight * 26.0 - uTime * 1.8 + vPhase * 6.28318) * 0.5 + 0.5;
+    float scanWave = sin(
+      vHeight * 26.0 - uTime * (1.8 + uVoice * 0.65) + vPhase * 6.28318
+    ) * 0.5 + 0.5;
     float scan = pow(smoothstep(0.72, 1.0, scanWave), 4.0);
     float cap = smoothstep(0.82, 1.0, vHeight);
     vec3 color = mix(uPrimary, uSecondary, vertical * 0.58);
     color = mix(color, uAccent, cap * 0.72 + scan * 0.16);
-    float alpha = (0.09 + fresnel * 0.42 + cap * 0.2 + scan * 0.08) * uOpacity;
+    color += uAccent * uVoice * (cap * 0.09 + scan * 0.04);
+    float alpha = (
+      0.09 + fresnel * 0.42 + cap * (0.2 + uVoice * 0.04) + scan * 0.08
+    ) * uOpacity;
     if (alpha < 0.003) discard;
     gl_FragColor = vec4(color, alpha);
   }
@@ -1880,15 +1905,19 @@ const evidenceCurveFragmentShader = /* glsl */ `
   uniform vec3 uPrimary;
   uniform float uReveal;
   uniform float uTime;
+  uniform float uVoice;
   varying float vAlong;
 
   void main() {
     float edge = 1.0 - smoothstep(uReveal - 0.035, uReveal + 0.012, vAlong);
-    float pulsePosition = fract(uTime * 0.16);
+    float pulsePosition = fract(uTime * (0.16 + uVoice * 0.035));
     float pulseDistance = min(abs(vAlong - pulsePosition), 1.0 - abs(vAlong - pulsePosition));
     float pulse = exp(-pulseDistance * pulseDistance * 420.0);
-    vec3 color = mix(uPrimary, uAccent, vAlong * 0.7 + pulse * 0.3);
-    gl_FragColor = vec4(color, (0.52 + pulse * 0.48) * edge * uOpacity);
+    vec3 color = mix(uPrimary, uAccent, vAlong * 0.7 + pulse * (0.3 + uVoice * 0.1));
+    gl_FragColor = vec4(
+      color,
+      (0.52 + pulse * (0.48 + uVoice * 0.12)) * edge * uOpacity
+    );
   }
 `;
 
@@ -1931,6 +1960,7 @@ function EvidenceField({
     uPrimary: { value: new Color(cue.palette.primary) },
     uSecondary: { value: new Color(cue.palette.secondary) },
     uAccent: { value: new Color(cue.palette.accent) },
+    uVoice: { value: 0 },
   }), []);
   const curveUniforms = useMemo(() => ({
     uTime: { value: 0 },
@@ -1938,6 +1968,7 @@ function EvidenceField({
     uOpacity: { value: 0 },
     uPrimary: { value: new Color(cue.palette.primary) },
     uAccent: { value: new Color(cue.palette.accent) },
+    uVoice: { value: 0 },
   }), []);
 
   useLayoutEffect(() => {
@@ -1960,6 +1991,10 @@ function EvidenceField({
     const actorDamping = enabled ? damping : Math.max(damping, 8);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     const elapsed = clock.getElapsedTime();
+    const voice = Math.min(
+      1.4,
+      motion.voiceLevel + motion.voiceImpulse * 0.42 + motion.voicePeak * 0.24,
+    );
     const targetScale = enabled ? cue.composition.chartScale : 0;
     if (enabled) {
       revealRef.current = Math.max(
@@ -2067,6 +2102,12 @@ function EvidenceField({
     paletteTargets.secondary.set(cue.palette.secondary);
     paletteTargets.accent.set(cue.palette.accent);
     columnMaterialRef.current.uniforms.uTime.value = elapsed;
+    columnMaterialRef.current.uniforms.uVoice.value = MathUtils.damp(
+      columnMaterialRef.current.uniforms.uVoice.value,
+      voice,
+      actorDamping,
+      delta,
+    );
     columnMaterialRef.current.uniforms.uOpacity.value = MathUtils.damp(
       columnMaterialRef.current.uniforms.uOpacity.value,
       enabled ? 0.82 + motion.voiceLevel * 0.1 : 0,
@@ -2077,6 +2118,12 @@ function EvidenceField({
     columnMaterialRef.current.uniforms.uSecondary.value.lerp(paletteTargets.secondary, paletteAlpha);
     columnMaterialRef.current.uniforms.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
     curveMaterialRef.current.uniforms.uTime.value = elapsed;
+    curveMaterialRef.current.uniforms.uVoice.value = MathUtils.damp(
+      curveMaterialRef.current.uniforms.uVoice.value,
+      voice,
+      actorDamping,
+      delta,
+    );
     curveMaterialRef.current.uniforms.uReveal.value = MathUtils.damp(
       curveMaterialRef.current.uniforms.uReveal.value,
       reveal,
