@@ -20,7 +20,6 @@ import {
   DirectionalLight,
   DoubleSide,
   Group,
-  LineBasicMaterial,
   MathUtils,
   Mesh,
   MeshBasicMaterial,
@@ -47,6 +46,7 @@ import {
 } from './renderTelemetry';
 import type { StageEventId, StageState } from './stageScore';
 import type { PresenterEnergySignal } from '../domain/presenterAudio';
+import { createOrganicNetworkGeometry } from './organicNetwork';
 
 interface StageMotionBus extends CueMotionSample {
   actorArrival: number;
@@ -1294,6 +1294,7 @@ function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
       delta,
     );
     groupRef.current.scale.setScalar(scale);
+    groupRef.current.visible = scale > 0.075;
 
     paletteTargets.primary.set(cue.palette.primary);
     paletteTargets.secondary.set(cue.palette.secondary);
@@ -1346,7 +1347,12 @@ function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
   });
 
   return (
-    <group ref={groupRef} position={[0.08, 0.18, 0.14]}>
+    <group
+      ref={groupRef}
+      position={[0.08, 0.18, 0.14]}
+      scale={cue.composition.coreScale}
+      visible={cue.composition.coreScale > 0.075}
+    >
       <RoundedBox args={[1.62, 1.96, 0.24]} radius={0.24} smoothness={5} position={[0, 0, -0.13]}>
         <meshPhysicalMaterial
           ref={outerMaterialRef}
@@ -1420,46 +1426,134 @@ function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
   );
 }
 
-const networkNodePositions = [
-  [-0.92, 0.16, 0.02],
-  [-0.62, 0.72, 0.05],
-  [-0.34, 0.32, 0.08],
-  [-0.08, 1.02, 0.02],
-  [0.18, 0.55, 0.1],
-  [0.52, 1.18, 0.04],
-  [0.74, 0.42, 0.12],
-  [0.98, 0.88, 0.02],
-  [0.44, -0.02, 0.08],
-  [-0.22, -0.18, 0.03],
-] as const;
+const organicLineVertexShader = /* glsl */ `
+  attribute float aGrowth;
+  attribute float aSeed;
+  attribute float aSide;
+  uniform float uEnergy;
+  uniform float uTime;
+  varying float vGrowth;
+  varying float vSeed;
+  varying float vSide;
 
-const networkEdges = [
-  [0, 1], [0, 2], [1, 2], [1, 3], [2, 4], [2, 9], [3, 4], [3, 5],
-  [4, 5], [4, 6], [4, 8], [5, 7], [6, 7], [6, 8], [8, 9],
-] as const;
+  void main() {
+    vGrowth = aGrowth;
+    vSeed = aSeed;
+    vSide = aSide;
+    vec3 animated = position;
+    float sway = sin(uTime * 0.31 + aGrowth * 8.0) * 0.018 * (0.35 + uEnergy);
+    animated.x += sway * aGrowth;
+    animated.z += cos(uTime * 0.23 + aGrowth * 6.0) * 0.012 * aGrowth * (0.4 + uEnergy);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(animated, 1.0);
+  }
+`;
+
+const organicLineFragmentShader = /* glsl */ `
+  uniform vec3 uAccent;
+  uniform float uOpacity;
+  uniform vec3 uPrimary;
+  uniform float uReveal;
+  uniform vec3 uSecondary;
+  uniform float uTime;
+  uniform float uVoice;
+  varying float vGrowth;
+  varying float vSeed;
+  varying float vSide;
+
+  void main() {
+    float reveal = 1.0 - smoothstep(uReveal - 0.02, uReveal + 0.045, vGrowth);
+    float travel = fract(uTime * (0.055 + uVoice * 0.025) + vSeed * 0.16);
+    float pulseDistance = min(abs(vGrowth - travel), 1.0 - abs(vGrowth - travel));
+    float pulse = exp(-pulseDistance * pulseDistance * 260.0);
+    vec3 color = mix(uPrimary, uAccent, smoothstep(0.18, 0.94, vGrowth));
+    color = mix(color, uSecondary, pulse * (0.68 + uVoice * 0.2));
+    float branchTexture = 0.82 + sin(vSeed * 31.0) * 0.18;
+    float edge = 1.0 - smoothstep(0.58, 1.0, abs(vSide));
+    float alpha = reveal * (0.38 + pulse * 0.72) * branchTexture * edge * uOpacity;
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+const organicPointVertexShader = /* glsl */ `
+  attribute float aGrowth;
+  attribute float aSeed;
+  attribute float aTerminal;
+  uniform float uReveal;
+  uniform float uScale;
+  uniform float uTime;
+  uniform float uVoice;
+  varying float vPulse;
+  varying float vReveal;
+  varying float vTerminal;
+
+  void main() {
+    vReveal = 1.0 - smoothstep(uReveal - 0.015, uReveal + 0.04, aGrowth);
+    float travel = fract(uTime * (0.055 + uVoice * 0.025) + aSeed * 0.16);
+    float pulseDistance = min(abs(aGrowth - travel), 1.0 - abs(aGrowth - travel));
+    vPulse = exp(-pulseDistance * pulseDistance * 240.0);
+    vTerminal = aTerminal;
+    vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
+    float size = 4.0 + aTerminal * 3.0 + vPulse * 4.8 + uVoice * 3.2;
+    gl_PointSize = size * uScale * (8.5 / max(1.0, -viewPosition.z));
+    gl_Position = projectionMatrix * viewPosition;
+  }
+`;
+
+const organicPointFragmentShader = /* glsl */ `
+  uniform vec3 uAccent;
+  uniform float uOpacity;
+  uniform vec3 uPrimary;
+  uniform vec3 uSecondary;
+  varying float vPulse;
+  varying float vReveal;
+  varying float vTerminal;
+
+  void main() {
+    float distanceToCenter = length(gl_PointCoord - 0.5);
+    float halo = 1.0 - smoothstep(0.16, 0.5, distanceToCenter);
+    float core = 1.0 - smoothstep(0.0, 0.14, distanceToCenter);
+    vec3 color = mix(uPrimary, uAccent, 0.35 + vTerminal * 0.45);
+    color = mix(color, uSecondary, vPulse * 0.82 + core * 0.18);
+    float alpha = (halo * 0.62 + core * 0.72) * vReveal * uOpacity;
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
 
 function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
   const groupRef = useRef<Group>(null);
-  const lineMaterialRef = useRef<LineBasicMaterial>(null);
-  const pointsMaterialRef = useRef<PointsMaterial>(null);
+  const lineMaterialRef = useRef<ShaderMaterial>(null);
+  const pointsMaterialRef = useRef<ShaderMaterial>(null);
   const targetPrimary = useMemo(() => new Color(cue.palette.primary), []);
+  const targetSecondary = useMemo(() => new Color(cue.palette.secondary), []);
   const targetAccent = useMemo(() => new Color(cue.palette.accent), []);
-  const nodePositions = useMemo(
-    () => new Float32Array(networkNodePositions.flatMap((position) => position)),
-    [],
-  );
-  const edgePositions = useMemo(
-    () => new Float32Array(networkEdges.flatMap(([start, end]) => [
-      ...networkNodePositions[start],
-      ...networkNodePositions[end],
-    ])),
-    [],
-  );
+  const geometry = useMemo(createOrganicNetworkGeometry, []);
+  const lineUniforms = useMemo(() => ({
+    uAccent: { value: new Color(cue.palette.accent) },
+    uEnergy: { value: cue.motionEnergy },
+    uOpacity: { value: 0.52 },
+    uPrimary: { value: new Color(cue.palette.primary) },
+    uReveal: { value: 0 },
+    uScale: { value: 0.03 },
+    uSecondary: { value: new Color(cue.palette.secondary) },
+    uTime: { value: 0 },
+    uVoice: { value: 0 },
+  }), []);
+  const pointUniforms = useMemo(() => ({
+    uAccent: { value: new Color(cue.palette.accent) },
+    uOpacity: { value: 0.92 },
+    uPrimary: { value: new Color(cue.palette.primary) },
+    uReveal: { value: 0 },
+    uSecondary: { value: new Color(cue.palette.secondary) },
+    uTime: { value: 0 },
+    uVoice: { value: 0 },
+  }), []);
 
   useFrame(({ clock }, delta) => {
-    if (!groupRef.current) return;
+    if (!groupRef.current || !lineMaterialRef.current || !pointsMaterialRef.current) return;
     const damping = phaseDamping(cue.transition.damping, motion.actorArrival);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
+    const voice = Math.min(1.4, motion.voiceLevel + motion.voiceImpulse * 0.45 + motion.voicePeak * 0.25);
+    const actorPresence = MathUtils.smoothstep(cue.composition.growthScale, 0.08, 0.24);
     const scale = MathUtils.damp(
       groupRef.current.scale.x,
       cue.composition.growthScale * (
@@ -1472,61 +1566,73 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
       delta,
     );
     groupRef.current.scale.setScalar(scale);
-    groupRef.current.rotation.y = Math.sin(clock.getElapsedTime() * 0.16) * 0.12 * cue.motionEnergy;
+    const elapsed = clock.getElapsedTime();
+    groupRef.current.rotation.y = Math.sin(elapsed * 0.16) * 0.1 * cue.motionEnergy;
+    groupRef.current.rotation.z = Math.sin(elapsed * 0.11) * 0.018 * cue.motionEnergy;
     targetPrimary.set(cue.palette.primary);
+    targetSecondary.set(cue.palette.secondary);
     targetAccent.set(cue.palette.accent);
-    lineMaterialRef.current?.color.lerp(targetPrimary, paletteAlpha);
-    pointsMaterialRef.current?.color.lerp(targetAccent, paletteAlpha);
-    if (lineMaterialRef.current) {
-      lineMaterialRef.current.opacity = MathUtils.damp(
-        lineMaterialRef.current.opacity,
-        0.54
-          + motion.impact * 0.14
-          + motion.voiceImpulse * 0.08
-          + motion.voiceLevel * 0.08,
-        damping,
-        delta,
-      );
-    }
-    if (pointsMaterialRef.current) {
-      pointsMaterialRef.current.size = MathUtils.damp(
-        pointsMaterialRef.current.size,
-        0.085
-          + motion.impact * 0.016
-          + motion.voiceImpulse * 0.024
-          + motion.voiceLevel * 0.02
-          + motion.voicePeak * 0.01,
-        damping,
-        delta,
-      );
-    }
+    lineMaterialRef.current.uniforms.uPrimary.value.lerp(targetPrimary, paletteAlpha);
+    lineMaterialRef.current.uniforms.uSecondary.value.lerp(targetSecondary, paletteAlpha);
+    lineMaterialRef.current.uniforms.uAccent.value.lerp(targetAccent, paletteAlpha);
+    lineMaterialRef.current.uniforms.uTime.value = elapsed;
+    lineMaterialRef.current.uniforms.uVoice.value = voice;
+    lineMaterialRef.current.uniforms.uEnergy.value = cue.motionEnergy + voice * 0.32;
+    lineMaterialRef.current.uniforms.uReveal.value = motion.actorArrival;
+    lineMaterialRef.current.uniforms.uOpacity.value = MathUtils.damp(
+      lineMaterialRef.current.uniforms.uOpacity.value,
+      (0.56 + motion.impact * 0.12 + voice * 0.16) * actorPresence,
+      damping,
+      delta,
+    );
+    pointsMaterialRef.current.uniforms.uPrimary.value.lerp(targetPrimary, paletteAlpha);
+    pointsMaterialRef.current.uniforms.uSecondary.value.lerp(targetSecondary, paletteAlpha);
+    pointsMaterialRef.current.uniforms.uAccent.value.lerp(targetAccent, paletteAlpha);
+    pointsMaterialRef.current.uniforms.uTime.value = elapsed;
+    pointsMaterialRef.current.uniforms.uVoice.value = voice;
+    pointsMaterialRef.current.uniforms.uReveal.value = motion.actorArrival;
+    const pointScaleUniform = pointsMaterialRef.current.uniforms.uScale;
+    if (pointScaleUniform) pointScaleUniform.value = scale;
+    pointsMaterialRef.current.uniforms.uOpacity.value = MathUtils.damp(
+      pointsMaterialRef.current.uniforms.uOpacity.value,
+      (0.86 + motion.impact * 0.08 + voice * 0.1) * actorPresence,
+      damping,
+      delta,
+    );
   });
 
   return (
-    <group ref={groupRef} position={[2.0, -1.1, 0.18]} scale={0.03}>
-      <lineSegments>
+    <group ref={groupRef} position={[2.0, -1.12, 0.18]} scale={0.03}>
+      <mesh>
         <bufferGeometry>
-          <bufferAttribute attach="attributes-position" args={[edgePositions, 3]} />
+          <bufferAttribute attach="attributes-position" args={[geometry.edgePositions, 3]} />
+          <bufferAttribute attach="attributes-aGrowth" args={[geometry.edgeGrowth, 1]} />
+          <bufferAttribute attach="attributes-aSeed" args={[geometry.edgeSeeds, 1]} />
+          <bufferAttribute attach="attributes-aSide" args={[geometry.edgeSides, 1]} />
         </bufferGeometry>
-        <lineBasicMaterial
+        <shaderMaterial
           ref={lineMaterialRef}
+          args={[{ uniforms: lineUniforms, vertexShader: organicLineVertexShader, fragmentShader: organicLineFragmentShader }]}
           blending={AdditiveBlending}
-          color={cue.palette.primary}
-          opacity={0.58}
+          depthWrite={false}
+          side={DoubleSide}
+          toneMapped={false}
           transparent
         />
-      </lineSegments>
+      </mesh>
       <points>
         <bufferGeometry>
-          <bufferAttribute attach="attributes-position" args={[nodePositions, 3]} />
+          <bufferAttribute attach="attributes-position" args={[geometry.nodePositions, 3]} />
+          <bufferAttribute attach="attributes-aGrowth" args={[geometry.nodeGrowth, 1]} />
+          <bufferAttribute attach="attributes-aSeed" args={[geometry.nodeSeeds, 1]} />
+          <bufferAttribute attach="attributes-aTerminal" args={[geometry.nodeTerminal, 1]} />
         </bufferGeometry>
-        <pointsMaterial
+        <shaderMaterial
           ref={pointsMaterialRef}
+          args={[{ uniforms: pointUniforms, vertexShader: organicPointVertexShader, fragmentShader: organicPointFragmentShader }]}
           blending={AdditiveBlending}
-          color={cue.palette.accent}
-          opacity={0.9}
-          size={0.085}
-          sizeAttenuation
+          depthWrite={false}
+          toneMapped={false}
           transparent
         />
       </points>
