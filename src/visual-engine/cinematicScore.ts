@@ -4,6 +4,28 @@ import type { CuePacingProfile } from './cuePacing';
 
 export type Vector3Tuple = readonly [number, number, number];
 export type Vector2Tuple = readonly [number, number];
+export type TransitionSignature =
+  | 'aperture_reveal'
+  | 'convergence'
+  | 'data_scan'
+  | 'organic_bloom'
+  | 'prism_sweep'
+  | 'ribbon_fold'
+  | 'soft_hold';
+
+const transitionSignatureIndices: Readonly<Record<TransitionSignature, number>> = {
+  prism_sweep: 0,
+  aperture_reveal: 1,
+  ribbon_fold: 2,
+  organic_bloom: 3,
+  data_scan: 4,
+  soft_hold: 5,
+  convergence: 6,
+};
+
+export function transitionSignatureIndex(signature: TransitionSignature): number {
+  return transitionSignatureIndices[signature];
+}
 
 export interface CinematicCue {
   copy: {
@@ -32,6 +54,7 @@ export interface CinematicCue {
     damping: number;
     copyDelayMs: number;
     copyOffset: Vector2Tuple;
+    signature: TransitionSignature;
     sweepAngle: number;
     sweepIntensity: number;
     pacing: CuePacingProfile;
@@ -105,7 +128,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 10;
+  schemaVersion: 11;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -123,7 +146,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 10,
+  schemaVersion: 11,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -155,6 +178,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         damping: 3.8,
         copyDelayMs: 100,
         copyOffset: [0, 36],
+        signature: 'prism_sweep',
         sweepAngle: 0.15,
         sweepIntensity: 0.74,
         pacing: {
@@ -259,6 +283,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         damping: 5.6,
         copyDelayMs: 80,
         copyOffset: [-72, 12],
+        signature: 'aperture_reveal',
         sweepAngle: 0,
         sweepIntensity: 0.95,
         pacing: {
@@ -363,6 +388,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         damping: 4.8,
         copyDelayMs: 100,
         copyOffset: [0, 42],
+        signature: 'ribbon_fold',
         sweepAngle: 1.15,
         sweepIntensity: 0.8,
         pacing: {
@@ -467,6 +493,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         damping: 3.4,
         copyDelayMs: 120,
         copyOffset: [46, 28],
+        signature: 'organic_bloom',
         sweepAngle: -0.55,
         sweepIntensity: 0.88,
         pacing: {
@@ -571,6 +598,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         damping: 6.4,
         copyDelayMs: 60,
         copyOffset: [84, 0],
+        signature: 'data_scan',
         sweepAngle: 3.1416,
         sweepIntensity: 1.1,
         pacing: {
@@ -675,6 +703,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         damping: 3,
         copyDelayMs: 160,
         copyOffset: [0, 14],
+        signature: 'soft_hold',
         sweepAngle: 1.5708,
         sweepIntensity: 0.25,
         pacing: {
@@ -779,6 +808,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         damping: 3.6,
         copyDelayMs: 110,
         copyOffset: [-40, 32],
+        signature: 'convergence',
         sweepAngle: 0.35,
         sweepIntensity: 1,
         pacing: {

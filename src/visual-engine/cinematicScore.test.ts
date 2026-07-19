@@ -3,12 +3,13 @@ import {
   dampingForDuration,
   getCinematicCue,
   omniVyxCinematicShow,
+  transitionSignatureIndex,
 } from './cinematicScore';
 import { stageEvents } from './stageScore';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(10);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(11);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -214,6 +215,17 @@ describe('cinematicScore', () => {
     expect(chart.negativeSpace).toBeGreaterThan(reveal.negativeSpace);
     expect(chart.focusSize).toBeLessThan(hold.focusSize);
     expect(hold.ambient).toBeLessThan(reveal.ambient);
+  });
+
+  it('authors a distinct semantic transition signature for every show beat', () => {
+    const signatures = omniVyxCinematicShow.cueOrder.map(
+      (eventId) => getCinematicCue(eventId).transition.signature,
+    );
+    const indices = signatures.map(transitionSignatureIndex);
+
+    expect(new Set(signatures).size).toBe(signatures.length);
+    expect(new Set(indices).size).toBe(indices.length);
+    expect(indices).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
   it('gives live direction and hold distinct optical-core compositions', () => {

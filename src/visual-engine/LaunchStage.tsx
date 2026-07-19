@@ -36,7 +36,11 @@ import {
   Vector2,
   Vector3,
 } from 'three';
-import { getCinematicCue, type CinematicCue } from './cinematicScore';
+import {
+  getCinematicCue,
+  transitionSignatureIndex,
+  type CinematicCue,
+} from './cinematicScore';
 import {
   decayImpulse,
   sampleCameraShotArc,
@@ -164,6 +168,7 @@ export function LaunchStage({
     pixelRatio: 0,
     triangles: 0,
   });
+  const [reducedMotion, setReducedMotion] = useState(false);
   const adaptiveDpr = state.quality === 'high'
     ? roundToStep(0.92 + performanceProfile.factor * 0.78, 0.05)
     : 1;
@@ -177,6 +182,14 @@ export function LaunchStage({
     });
   }, [state.quality]);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updatePreference = () => setReducedMotion(mediaQuery.matches);
+    updatePreference();
+    mediaQuery.addEventListener('change', updatePreference);
+    return () => mediaQuery.removeEventListener('change', updatePreference);
+  }, []);
+
   return (
     <section
       ref={stageRef}
@@ -185,6 +198,7 @@ export function LaunchStage({
       data-quality={state.quality}
       data-dpr-mode={state.quality === 'high' ? 'adaptive' : 'fixed'}
       data-render-scale={adaptiveDpr.toFixed(2)}
+      data-reduced-motion={reducedMotion}
       data-fps={measuredFps}
       data-frame-p95={renderTelemetry.frameTimeP95}
       data-long-frames={renderTelemetry.longFrames}
@@ -198,12 +212,14 @@ export function LaunchStage({
       data-light-negative-space={cue.lighting.negativeSpace.toFixed(2)}
       data-shot-dolly={cue.camera.shot.positionArc[2].toFixed(2)}
       data-shot-roll={cue.camera.shot.roll.toFixed(3)}
+      data-transition-signature={cue.transition.signature}
       data-glass-instances={OPTICAL_PANEL_LAYOUT.length}
       data-silk-draws="2"
       data-silk-profile="anisotropic-weave-v2"
       data-optical-core-draws={OPTICAL_CORE_DRAW_CALLS}
       data-optical-core-fins={OPTICAL_CORE_FIN_LAYOUT.length}
       data-optical-handoff-budget="1"
+      data-optical-handoff-enabled={!reducedMotion}
       data-organic-nodes={ORGANIC_NETWORK_NODE_COUNT}
       data-organic-edges={ORGANIC_NETWORK_EDGE_COUNT}
       data-organic-scale={cue.composition.growthScale.toFixed(2)}
@@ -269,6 +285,7 @@ export function LaunchStage({
             presenterEnergy={presenterEnergy}
             presenterPulse={presenterPulse}
             pace={cuePace}
+            reducedMotion={reducedMotion}
             stageElementRef={stageRef}
             state={state}
           />
@@ -534,6 +551,7 @@ interface LaunchSceneProps {
   pace: number;
   presenterEnergy?: PresenterEnergySignal;
   presenterPulse: number;
+  reducedMotion: boolean;
   stageElementRef: RefObject<HTMLElement | null>;
   state: StageState;
 }
@@ -545,6 +563,7 @@ function LaunchScene({
   pace,
   presenterEnergy,
   presenterPulse,
+  reducedMotion,
   stageElementRef,
   state,
 }: LaunchSceneProps) {
@@ -581,7 +600,7 @@ function LaunchScene({
       <CinematicLighting cue={cue} motion={motion} />
 
       <CameraRig cue={cue} motion={motion} />
-      <OpticalHandoff cue={cue} motion={motion} />
+      <OpticalHandoff cue={cue} enabled={!reducedMotion} motion={motion} />
       <StageEnvironment cue={cue} motion={motion} />
       <CinematicMediaPlate
         cue={cue}
@@ -972,11 +991,13 @@ const opticalHandoffFragmentShader = /* glsl */ `
   uniform vec3 uAccent;
   uniform float uAngle;
   uniform float uAspect;
+  uniform vec2 uFocus;
   uniform float uImpact;
   uniform float uOpacity;
   uniform vec3 uPrimary;
   uniform float uProgress;
   uniform vec3 uSecondary;
+  uniform float uSignature;
   uniform float uTime;
   uniform float uVoice;
   uniform float uWidth;
@@ -985,6 +1006,11 @@ const opticalHandoffFragmentShader = /* glsl */ `
   void main() {
     vec2 point = vUv - 0.5;
     point.x *= uAspect;
+    vec2 focalPoint = uFocus - 0.5;
+    focalPoint.x *= uAspect;
+    vec2 radialPoint = point - focalPoint;
+    float radius = length(radialPoint);
+    float theta = atan(radialPoint.y, radialPoint.x);
     vec2 axis = vec2(cos(uAngle), sin(uAngle));
     vec2 crossAxis = vec2(-axis.y, axis.x);
     float along = dot(point, axis);
@@ -1003,7 +1029,7 @@ const opticalHandoffFragmentShader = /* glsl */ `
     float fringeB = exp(-pow(abs(signedDistance + 0.034 * uWidth) * 88.0 / uWidth, 1.4));
     float caustic = exp(-pow(abs(signedDistance - sin(across * 19.0 + uTime) * 0.009)
       * 48.0 / uWidth, 1.5));
-    float aperture = 0.45 + 0.55 * exp(-across * across * 2.8);
+    float sweepAperture = 0.45 + 0.55 * exp(-across * across * 2.8);
     float weave = sin(across * 73.0 - uTime * (0.9 + uVoice * 0.5)) * 0.5 + 0.5;
     float fibers = pow(weave, 8.0) * body;
     vec3 spectrum = 0.5 + 0.5 * cos(
@@ -1017,20 +1043,182 @@ const opticalHandoffFragmentShader = /* glsl */ `
     color += spectrum * (fringeA + fringeB) * 0.36;
     color += mix(uPrimary, uSecondary, weave) * caustic * (0.16 + uVoice * 0.12);
     color += uSecondary * fibers * (0.12 + uVoice * 0.18);
-    float alpha = uOpacity * aperture * (
+    float alpha = uOpacity * sweepAperture * (
       body * 0.045
       + core * 0.2
       + (fringeA + fringeB) * 0.075
       + caustic * 0.04
       + fibers * 0.03
     );
+
+    if (uSignature > 0.5 && uSignature < 1.5) {
+      float ringRadius = mix(
+        0.018,
+        1.12 + max(0.0, uAspect - 1.0) * 0.52,
+        travel
+      );
+      float ringDistance = abs(radius - ringRadius);
+      float ringHalo = exp(-pow(ringDistance * 7.2 / uWidth, 1.24));
+      float ringBody = exp(-pow(ringDistance * 20.0 / uWidth, 1.42));
+      float ringCore = exp(-pow(ringDistance * 84.0 / uWidth, 1.28));
+      float facetWave = 0.5 + 0.5 * cos(theta * 10.0 - uTime * 0.52);
+      float facets = pow(facetWave, 10.0) * ringBody;
+      float echoRing = exp(-pow(abs(radius - ringRadius * 0.76) * 38.0 / uWidth, 1.38));
+      vec3 radialSpectrum = 0.5 + 0.5 * cos(
+        6.28318 * (theta * 0.11 + ringDistance * 5.0 + vec3(0.0, 0.17, 0.36))
+      );
+      color = mix(uPrimary, uAccent, facetWave) * ringHalo * 0.24;
+      color += mix(uPrimary, uAccent, facetWave) * ringBody * 0.42;
+      color += uSecondary * ringCore * (1.34 + uImpact * 0.34);
+      color += radialSpectrum * facets * 0.5;
+      color += mix(uPrimary, uSecondary, 0.55) * echoRing * 0.16;
+      alpha = uOpacity * (
+        ringHalo * 0.058
+        + ringBody * 0.055
+        + ringCore * 0.23
+        + facets * 0.07
+        + echoRing * 0.035
+      );
+    } else if (uSignature > 1.5 && uSignature < 2.5) {
+      float ribbonCurl = sin(across * 5.4 - uTime * 0.42) * (0.052 + uWidth * 0.018)
+        + sin(across * 13.0 + uTime * 0.28) * 0.018;
+      float ribbonSigned = along - center + ribbonCurl;
+      float ribbonDistance = abs(ribbonSigned);
+      float foldHalo = exp(-pow(ribbonDistance * 5.2 / uWidth, 1.22));
+      float foldBody = exp(-pow(ribbonDistance * 15.0 / uWidth, 1.34));
+      float foldCore = exp(-pow(ribbonDistance * 68.0 / uWidth, 1.28));
+      float foldEdgeA = exp(-pow(abs(ribbonSigned - 0.045 * uWidth) * 64.0 / uWidth, 1.32));
+      float foldEdgeB = exp(-pow(abs(ribbonSigned + 0.052 * uWidth) * 58.0 / uWidth, 1.32));
+      float pleat = pow(0.5 + 0.5 * sin(across * 42.0 + uTime * 0.48), 11.0) * foldBody;
+      color = mix(uPrimary, uAccent, smoothstep(-0.55, 0.55, across)) * foldHalo * 0.2;
+      color += mix(uPrimary, uAccent, smoothstep(-0.55, 0.55, across)) * foldBody * 0.34;
+      color += uSecondary * foldCore * (1.16 + uImpact * 0.3);
+      color += uAccent * foldEdgeA * 0.46 + uPrimary * foldEdgeB * 0.42;
+      color += mix(uPrimary, uSecondary, pleat) * pleat * (0.2 + uVoice * 0.12);
+      alpha = uOpacity * (
+        foldHalo * 0.052
+        + foldBody * 0.05
+        + foldCore * 0.2
+        + (foldEdgeA + foldEdgeB) * 0.055
+        + pleat * 0.045
+      );
+    } else if (uSignature > 2.5 && uSignature < 3.5) {
+      float frontRadius = mix(
+        0.025,
+        1.08 + max(0.0, uAspect - 1.0) * 0.42,
+        travel
+      );
+      float frontDistance = abs(radius - frontRadius);
+      float growthMist = exp(-pow(frontDistance * 6.2 / uWidth, 1.25));
+      float frontPattern = 0.16 + 0.84 * pow(
+        0.5 + 0.5 * cos(theta * 9.0 + radius * 11.0 - uTime * 0.34),
+        5.0
+      );
+      float growthFront = exp(-pow(frontDistance * 22.0 / uWidth, 1.38)) * frontPattern;
+      float growthCore = exp(-pow(frontDistance * 76.0 / uWidth, 1.26)) * frontPattern;
+      float insideGrowth = 1.0 - smoothstep(frontRadius - 0.06, frontRadius + 0.05, radius);
+      float branchWave = abs(sin(
+        theta * 6.0 + sin(theta * 3.0) * 0.78 + radius * 17.0 - uTime * 0.3
+      ));
+      float branches = exp(-branchWave * 12.0)
+        * insideGrowth
+        * smoothstep(0.035, 0.16, radius);
+      float veinWave = abs(sin(theta * 11.0 - radius * 23.0 + uTime * 0.18));
+      float veins = exp(-veinWave * 26.0) * branches;
+      float tips = growthFront * pow(0.5 + 0.5 * cos(theta * 11.0 + radius * 8.0), 9.0);
+      color = uPrimary * growthMist * 0.2;
+      color += uPrimary * branches * (0.72 + uVoice * 0.14);
+      color += uSecondary * growthCore * (0.92 + uImpact * 0.26);
+      color += uAccent * (growthFront * 0.36 + tips * 0.58);
+      color += mix(uPrimary, uSecondary, 0.62) * veins * 0.44;
+      alpha = uOpacity * (
+        growthMist * 0.045
+        + growthFront * 0.065
+        + growthCore * 0.14
+        + branches * 0.12
+        + veins * 0.065
+        + tips * 0.07
+      );
+    } else if (uSignature > 3.5 && uSignature < 4.5) {
+      float scanWash = exp(-pow(distanceToSweep * 4.6 / uWidth, 1.22));
+      float scanBody = exp(-pow(distanceToSweep * 13.0 / uWidth, 1.38));
+      float scanCore = exp(-pow(distanceToSweep * 94.0 / uWidth, 1.24));
+      float dataGridX = pow(1.0 - abs(sin(vUv.x * 3.14159 * 16.0)), 34.0);
+      float dataGridY = pow(1.0 - abs(sin(vUv.y * 3.14159 * 10.0)), 34.0);
+      float dataGrid = (dataGridX + dataGridY) * scanBody;
+      float ticks = pow(0.5 + 0.5 * sin(across * 92.0 - uTime * 0.38), 16.0) * scanBody;
+      float cap = exp(-pow(abs(signedDistance - 0.022 * uWidth) * 112.0 / uWidth, 1.24));
+      color = uPrimary * scanWash * 0.28;
+      color += uPrimary * scanBody * 0.24;
+      color += uSecondary * scanCore * (1.42 + uImpact * 0.32);
+      color += uAccent * cap * 0.68;
+      color += mix(uPrimary, uSecondary, 0.72) * dataGrid * 0.42;
+      color += uAccent * ticks * (0.18 + uVoice * 0.08);
+      alpha = uOpacity * (
+        scanWash * 0.07
+        + scanBody * 0.035
+        + scanCore * 0.22
+        + cap * 0.07
+        + dataGrid * 0.065
+        + ticks * 0.035
+      );
+    } else if (uSignature > 4.5 && uSignature < 5.5) {
+      float holdRadius = mix(0.04, 0.74, travel);
+      float holdRing = exp(-pow(abs(radius - holdRadius) * 22.0 / uWidth, 1.5));
+      float holdCore = exp(-pow(abs(radius - holdRadius) * 66.0 / uWidth, 1.34));
+      float holdGlow = exp(-radius * radius * mix(28.0, 5.4, travel));
+      float breath = 0.86 + sin(uTime * 0.38) * 0.14;
+      color = mix(uPrimary, uSecondary, 0.62) * holdRing * 0.24;
+      color += uSecondary * holdCore * (0.64 + uImpact * 0.12);
+      color += uAccent * holdGlow * 0.07 * breath;
+      alpha = uOpacity * (
+        holdRing * 0.038
+        + holdCore * 0.09
+        + holdGlow * 0.012
+      );
+    } else if (uSignature > 5.5) {
+      float convergence = sin(travel * 3.14159);
+      float beamWidth = mix(0.008, 0.038, convergence) * uWidth;
+      float beamA = exp(-pow(abs(radialPoint.x + radialPoint.y * 0.48) / beamWidth, 1.36));
+      float beamB = exp(-pow(abs(radialPoint.x - radialPoint.y * 0.72) / beamWidth, 1.36));
+      float beamC = exp(-pow(abs(radialPoint.y + radialPoint.x * 0.18) / (beamWidth * 0.78), 1.36));
+      float beamGate = exp(-radius * mix(4.2, 0.92, convergence));
+      float convergedBeams = (beamA + beamB + beamC * 0.68) * beamGate;
+      float convergenceGlow = exp(-radius * radius * mix(34.0, 4.8, convergence));
+      float focusCore = exp(-radius * radius * mix(96.0, 9.0, convergence));
+      float convergenceRing = exp(-pow(
+        abs(radius - (1.0 - convergence) * 0.34) * 54.0 / uWidth,
+        1.32
+      ));
+      color = uPrimary * convergenceGlow * 0.16;
+      color += uPrimary * convergedBeams * (0.36 + uVoice * 0.1);
+      color += uSecondary * focusCore * (0.82 + uImpact * 0.28);
+      color += uAccent * convergenceRing * 0.46;
+      color += mix(uPrimary, uSecondary, convergence) * convergedBeams * convergence * 0.22;
+      alpha = uOpacity * (
+        convergenceGlow * 0.035
+        + convergedBeams * 0.055
+        + focusCore * 0.11
+        + convergenceRing * 0.055
+      );
+    }
+
+    color *= 1.0 + uVoice * 0.045;
     if (alpha < 0.002) discard;
 
     gl_FragColor = vec4(color, alpha);
   }
 `;
 
-function OpticalHandoff({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
+function OpticalHandoff({
+  cue,
+  enabled,
+  motion,
+}: {
+  cue: CinematicCue;
+  enabled: boolean;
+  motion: StageMotionBus;
+}) {
   const meshRef = useRef<Mesh>(null);
   const materialRef = useRef<ShaderMaterial>(null);
   const paletteTargets = useMemo(
@@ -1045,15 +1233,18 @@ function OpticalHandoff({ cue, motion }: { cue: CinematicCue; motion: StageMotio
     () => ({ active: false, opacity: 0, width: 1 }),
     [],
   );
+  const signatureIndex = transitionSignatureIndex(cue.transition.signature);
   const uniforms = useMemo(() => ({
     uAccent: { value: new Color(cue.palette.accent) },
     uAngle: { value: cue.transition.sweepAngle },
     uAspect: { value: 1 },
+    uFocus: { value: new Vector2(...cue.lighting.focus) },
     uImpact: { value: 0 },
     uOpacity: { value: 0 },
     uPrimary: { value: new Color(cue.palette.primary) },
     uProgress: { value: 0 },
     uSecondary: { value: new Color(cue.palette.secondary) },
+    uSignature: { value: signatureIndex },
     uTime: { value: 0 },
     uVoice: { value: 0 },
     uWidth: { value: 1 },
@@ -1061,6 +1252,10 @@ function OpticalHandoff({ cue, motion }: { cue: CinematicCue; motion: StageMotio
 
   useFrame(({ camera, clock, size }, delta) => {
     if (!meshRef.current || !materialRef.current) return;
+    if (!enabled) {
+      meshRef.current.visible = false;
+      return;
+    }
 
     sampleOpticalHandoff(
       motion.progress,
@@ -1089,10 +1284,22 @@ function OpticalHandoff({ cue, motion }: { cue: CinematicCue; motion: StageMotio
 
     materialRef.current.uniforms.uAngle.value = cue.transition.sweepAngle;
     materialRef.current.uniforms.uAspect.value = size.width / size.height;
+    const portraitMix = 1 - MathUtils.smoothstep(size.width / size.height, 0.72, 1.25);
+    materialRef.current.uniforms.uFocus.value.x = MathUtils.lerp(
+      cue.lighting.focus[0],
+      0.52,
+      portraitMix,
+    );
+    materialRef.current.uniforms.uFocus.value.y = MathUtils.lerp(
+      cue.lighting.focus[1],
+      0.56,
+      portraitMix,
+    );
     materialRef.current.uniforms.uImpact.value = motion.impact;
     materialRef.current.uniforms.uOpacity.value = handoffSample.opacity;
     materialRef.current.uniforms.uProgress.value = motion.progress;
     materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
+    materialRef.current.uniforms.uSignature.value = signatureIndex;
     materialRef.current.uniforms.uVoice.value = Math.min(
       1.4,
       motion.voiceLevel + motion.voiceImpulse * 0.48 + motion.voicePeak * 0.22,
