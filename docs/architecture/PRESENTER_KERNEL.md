@@ -54,6 +54,8 @@ The current React proof submits transcript or intent signals through this contra
 
 Stage components consume those targets with frame-rate-independent exponential damping. Cue handlers never mutate Three.js objects directly and render-loop code does not allocate target vectors per frame.
 
+The visual grammar is cue-directed rather than globally decorative. Each cue authors a palette plus hero position, scale, and yaw. Product, network, and dynamic-data moments enforce a single dominant actor so supporting geometry yields instead of accumulating. The current premium material set consists of a layered optical monolith, shader-based liquid-glass panels, palette-driven procedural cloth, and a two-draw-call network bloom.
+
 ## Render Quality Contract
 
 High quality is adaptive rather than a fixed pixel ratio. The stage measures sustained frame performance, selects a bounded device pixel ratio, and temporarily regresses resolution during scored transitions. The manual low-quality gate remains available as a deterministic fallback and disables post-processing.

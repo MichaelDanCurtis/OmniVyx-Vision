@@ -34,6 +34,7 @@ describe('cinematicScore', () => {
       expect(cue.camera.fov).toBeGreaterThanOrEqual(30);
       expect(cue.camera.fov).toBeLessThanOrEqual(55);
       expect(cue.copy.headline.length).toBeGreaterThan(0);
+      expect(Object.values(cue.palette).every((color) => /^#[0-9a-f]{6}$/i.test(color))).toBe(true);
     }
   });
 
@@ -41,5 +42,18 @@ describe('cinematicScore', () => {
     expect(dampingForDuration(1_000)).toBeCloseTo(Math.log(20), 6);
     expect(dampingForDuration(2_000)).toBeCloseTo(Math.log(20) / 2, 6);
     expect(() => dampingForDuration(0)).toThrow(/positive finite/);
+  });
+
+  it('gives each major cue one dominant visual actor', () => {
+    const reveal = getCinematicCue('reveal_product').composition;
+    const growth = getCinematicCue('grow_system').composition;
+    const chart = getCinematicCue('summon_dynamic_chart').composition;
+
+    expect(reveal.coreScale).toBeGreaterThan(1);
+    expect(growth.growthScale).toBe(1);
+    expect(growth.coreScale).toBeLessThan(0.1);
+    expect(chart.chartScale).toBe(1);
+    expect(chart.coreScale).toBeLessThan(0.1);
+    expect(chart.growthScale).toBeLessThan(0.1);
   });
 });
