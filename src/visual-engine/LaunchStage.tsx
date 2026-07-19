@@ -56,6 +56,7 @@ import type { StageEventId, StageState } from './stageScore';
 import type { PresenterEnergySignal } from '../domain/presenterAudio';
 import {
   createOrganicNetworkGeometry,
+  ORGANIC_NETWORK_EDGE_COUNT,
   ORGANIC_NETWORK_NODE_COUNT,
 } from './organicNetwork';
 import { resolveCuePace, scaleCueDuration } from './cuePacing';
@@ -197,6 +198,7 @@ export function LaunchStage({
       data-optical-core-fins={OPTICAL_CORE_FIN_LAYOUT.length}
       data-optical-handoff-budget="1"
       data-organic-nodes={ORGANIC_NETWORK_NODE_COUNT}
+      data-organic-edges={ORGANIC_NETWORK_EDGE_COUNT}
       data-organic-scale={cue.composition.growthScale.toFixed(2)}
       data-evidence-active={state.dynamicChartVisible}
       data-evidence-points={launchEvidence.points.length}
@@ -2676,19 +2678,34 @@ const organicLineFragmentShader = /* glsl */ `
     float travel = fract(uTime * (0.055 + uVoice * 0.025) + vSeed * 0.16);
     float pulseDistance = min(abs(vGrowth - travel), 1.0 - abs(vGrowth - travel));
     float pulse = exp(-pulseDistance * pulseDistance * 260.0);
+    float frontier = exp(-pow(vGrowth - uReveal, 2.0) * 720.0);
     float side = abs(vSide);
     float body = 1.0 - smoothstep(0.7, 1.0, side);
     float core = 1.0 - smoothstep(0.08, 0.34, side);
     float rim = smoothstep(0.28, 0.66, side) * (1.0 - smoothstep(0.7, 1.0, side));
-    float striation = pow(sin(vGrowth * 54.0 + vSeed * 24.0 - uTime * 0.12) * 0.5 + 0.5, 3.0);
+    float conduction = pow(
+      sin(vGrowth * 78.0 + vSeed * 24.0 - uTime * (0.42 + uVoice * 0.16)) * 0.5 + 0.5,
+      4.0
+    );
+    float striation = pow(sin(vGrowth * 42.0 + vSeed * 18.0 + side * 5.0) * 0.5 + 0.5, 3.0);
     float depthLight = 0.66 + smoothstep(-0.22, 0.3, vDepth) * 0.34;
     float tip = smoothstep(0.72, 1.0, vGrowth);
-    vec3 color = mix(uPrimary, uAccent, tip * 0.72 + rim * 0.2);
-    color = mix(color, uSecondary, core * 0.32 + pulse * (0.64 + uVoice * 0.18));
-    color += uAccent * striation * 0.08;
+    float root = 1.0 - smoothstep(0.08, 0.58, vGrowth);
+    vec3 color = mix(uPrimary, uAccent, tip * 0.74 + rim * 0.18);
+    color = mix(color, uSecondary, root * 0.18 + core * 0.3 + pulse * (0.64 + uVoice * 0.18));
+    color += uAccent * (striation * 0.055 + frontier * (0.34 + uVoice * 0.16));
+    color += uSecondary * conduction * core * (0.06 + uVoice * 0.045);
     float alpha = reveal
       * body
-      * (0.1 + core * 0.42 + rim * 0.16 + striation * 0.08 + pulse * 0.58)
+      * (
+        0.08
+        + core * 0.46
+        + rim * 0.17
+        + striation * 0.06
+        + conduction * 0.08
+        + pulse * 0.58
+        + frontier * (0.42 + uVoice * 0.16)
+      )
       * depthLight
       * uOpacity;
     gl_FragColor = vec4(color, alpha);
@@ -2705,6 +2722,7 @@ const organicPointVertexShader = /* glsl */ `
   uniform float uTime;
   uniform float uVoice;
   varying float vPulse;
+  varying float vFrontier;
   varying float vReveal;
   varying float vSeed;
   varying float vTerminal;
@@ -2714,6 +2732,7 @@ const organicPointVertexShader = /* glsl */ `
     float travel = fract(uTime * (0.055 + uVoice * 0.025) + aSeed * 0.16);
     float pulseDistance = min(abs(aGrowth - travel), 1.0 - abs(aGrowth - travel));
     vPulse = exp(-pulseDistance * pulseDistance * 240.0);
+    vFrontier = exp(-pow(aGrowth - uReveal, 2.0) * 760.0);
     vSeed = aSeed;
     vTerminal = aTerminal;
     vec3 animated = position;
@@ -2721,7 +2740,11 @@ const organicPointVertexShader = /* glsl */ `
     animated.y += cos(uTime * 0.17 + aGrowth * 7.0) * 0.006 * aGrowth * uEnergy;
     animated.z += cos(uTime * 0.23 + aGrowth * 6.0) * 0.012 * aGrowth * (0.4 + uEnergy);
     vec4 viewPosition = modelViewMatrix * vec4(animated, 1.0);
-    float size = 4.8 + aTerminal * 8.0 + vPulse * 5.8 + uVoice * 3.8;
+    float size = 4.4
+      + aTerminal * 13.0
+      + vPulse * (4.8 + aTerminal * 2.4)
+      + uVoice * (2.6 + aTerminal * 2.8)
+      + vFrontier * 3.2;
     gl_PointSize = size * uScale * (8.5 / max(1.0, -viewPosition.z));
     gl_Position = projectionMatrix * viewPosition;
   }
@@ -2733,6 +2756,7 @@ const organicPointFragmentShader = /* glsl */ `
   uniform vec3 uPrimary;
   uniform vec3 uSecondary;
   varying float vPulse;
+  varying float vFrontier;
   varying float vReveal;
   varying float vSeed;
   varying float vTerminal;
@@ -2743,17 +2767,36 @@ const organicPointFragmentShader = /* glsl */ `
     mat2 rotation = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
     vec2 lensPoint = rotation * point;
     float distanceToCenter = length(point);
-    float lensDistance = length(vec2(lensPoint.x * 0.82, lensPoint.y * 1.42));
+    float lensDistance = length(vec2(lensPoint.x * 0.86, lensPoint.y * 1.34));
     float diamondDistance = abs(lensPoint.x) + abs(lensPoint.y);
     float halo = 1.0 - smoothstep(0.2, 0.5, distanceToCenter);
     float lens = 1.0 - smoothstep(0.18, 0.44, lensDistance);
     float ring = smoothstep(0.11, 0.2, lensDistance) * (1.0 - smoothstep(0.28, 0.4, lensDistance));
     float core = 1.0 - smoothstep(0.04, 0.16, diamondDistance);
-    vec3 color = mix(uPrimary, uAccent, 0.28 + vTerminal * 0.5 + ring * 0.16);
-    color = mix(color, uSecondary, vPulse * 0.72 + core * 0.28);
-    float alpha = (halo * 0.18 + lens * 0.3 + ring * 0.36 + core * 0.82)
+    float leafDistance = length(vec2(lensPoint.x * 0.72, lensPoint.y * 1.72));
+    float leaf = 1.0 - smoothstep(0.34, 0.49, leafDistance);
+    float leafRim = smoothstep(0.23, 0.36, leafDistance)
+      * (1.0 - smoothstep(0.4, 0.49, leafDistance));
+    float vein = exp(-pow(lensPoint.y, 2.0) * 1100.0)
+      * (1.0 - smoothstep(0.34, 0.48, abs(lensPoint.x)));
+    float veinFork = exp(-pow(abs(lensPoint.y) - abs(lensPoint.x) * 0.26, 2.0) * 950.0)
+      * smoothstep(0.08, 0.34, abs(lensPoint.x));
+    float facet = sin(lensPoint.x * 26.0 + lensPoint.y * 18.0 + vSeed * 6.28318) * 0.5 + 0.5;
+    vec3 nodeColor = mix(uPrimary, uAccent, 0.28 + ring * 0.16);
+    nodeColor = mix(nodeColor, uSecondary, vPulse * 0.72 + core * 0.28);
+    vec3 leafColor = mix(uPrimary, uAccent, 0.34 + facet * 0.38 + leafRim * 0.18);
+    leafColor += uSecondary * (vein * 0.42 + veinFork * 0.16 + vPulse * 0.2);
+    leafColor += uAccent * vFrontier * 0.34;
+    vec3 color = mix(nodeColor, leafColor, vTerminal);
+    float nodeAlpha = halo * 0.18 + lens * 0.3 + ring * 0.36 + core * 0.82;
+    float leafAlpha = leaf * 0.28
+      + leafRim * 0.42
+      + vein * 0.72
+      + veinFork * 0.18
+      + vPulse * 0.28
+      + vFrontier * 0.38;
+    float alpha = mix(nodeAlpha * 0.46, leafAlpha, vTerminal)
       * vReveal
-      * (0.45 + vTerminal * 0.55)
       * uOpacity;
     if (alpha < 0.003) discard;
     gl_FragColor = vec4(color, alpha);

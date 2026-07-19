@@ -100,6 +100,13 @@ export const ORGANIC_NETWORK_EDGE_COUNT = nodes.length - 1;
 export const ORGANIC_NETWORK_SEGMENTS_PER_EDGE = 6;
 export const ORGANIC_NETWORK_VERTICES_PER_SEGMENT = 6;
 
+export function organicBranchWidth(growth: number): number {
+  if (!Number.isFinite(growth) || growth < 0 || growth > 1) {
+    throw new Error('Organic branch growth must be finite and between zero and one.');
+  }
+  return 0.046 - growth * 0.025;
+}
+
 function sampleQuadratic(
   start: Position3,
   control: Position3,
@@ -163,8 +170,8 @@ export function createOrganicNetworkGeometry(): OrganicNetworkGeometry {
       const tangentLength = Math.max(0.001, Math.hypot(tangentX, tangentY));
       const normalX = -tangentY / tangentLength;
       const normalY = tangentX / tangentLength;
-      const startWidth = 0.033 - startGrowth * 0.014;
-      const endWidth = 0.033 - endGrowth * 0.014;
+      const startWidth = organicBranchWidth(startGrowth);
+      const endWidth = organicBranchWidth(endGrowth);
       const startLeft: Position3 = [
         start[0] + normalX * startWidth,
         start[1] + normalY * startWidth,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createOrganicNetworkGeometry,
+  organicBranchWidth,
   ORGANIC_NETWORK_EDGE_COUNT,
   ORGANIC_NETWORK_NODE_COUNT,
   ORGANIC_NETWORK_SEGMENTS_PER_EDGE,
@@ -53,5 +54,13 @@ describe('organicNetwork', () => {
       ...geometry.nodeSeeds,
       ...geometry.nodeTerminal,
     ].every(Number.isFinite)).toBe(true);
+  });
+
+  it('tapers the living structure from a substantial root to fine tips', () => {
+    expect(organicBranchWidth(0)).toBeCloseTo(0.046, 8);
+    expect(organicBranchWidth(1)).toBeCloseTo(0.021, 8);
+    expect(organicBranchWidth(0.2)).toBeGreaterThan(organicBranchWidth(0.8));
+    expect(() => organicBranchWidth(-0.1)).toThrow(/between zero and one/);
+    expect(() => organicBranchWidth(Number.NaN)).toThrow(/finite/);
   });
 });
