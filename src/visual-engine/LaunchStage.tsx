@@ -16,6 +16,7 @@ import {
 import {
   AdditiveBlending,
   BackSide,
+  CatmullRomCurve3,
   Color,
   DirectionalLight,
   DoubleSide,
@@ -54,6 +55,7 @@ import type { StageEventId, StageState } from './stageScore';
 import type { PresenterEnergySignal } from '../domain/presenterAudio';
 import { createOrganicNetworkGeometry } from './organicNetwork';
 import { resolveCuePace, scaleCueDuration } from './cuePacing';
+import { launchEvidence, normalizeEvidenceValues } from './evidenceScore';
 
 interface StageMotionBus extends CueMotionSample {
   actorArrival: number;
@@ -85,6 +87,18 @@ const OPTICAL_PANEL_LAYOUT = [
   { position: [-3.72, -1.02, -3.18], rotation: [0.04, 0.64, -0.12], scale: [1.46, 0.88], phase: 8.65, opacity: 0.42 },
   { position: [1.28, 1.92, -3.35], rotation: [0.18, -0.18, 0.1], scale: [1.18, 0.72], phase: 10.38, opacity: 0.36 },
 ] as const;
+
+const EVIDENCE_HEIGHTS = normalizeEvidenceValues(launchEvidence);
+const EVIDENCE_COLUMN_X = new Float32Array([-0.87, -0.29, 0.29, 0.87]);
+const EVIDENCE_BASE_Y = -0.78;
+const EVIDENCE_COLUMN_PHASES = new Float32Array([0, 0.22, 0.44, 0.66]);
+const EVIDENCE_CURVE = new CatmullRomCurve3(
+  Array.from(EVIDENCE_HEIGHTS, (height, index) => new Vector3(
+    EVIDENCE_COLUMN_X[index],
+    EVIDENCE_BASE_Y + 0.55 + height * 1.35,
+    0.08 + index * 0.018,
+  )),
+);
 
 interface LaunchStageProps {
   presenterEnergy?: PresenterEnergySignal;
@@ -143,6 +157,7 @@ export function LaunchStage({
       className="visual-engine-stage"
       data-stage-event={state.activeEvent}
       data-quality={state.quality}
+      data-dpr-mode={state.quality === 'high' ? 'adaptive' : 'fixed'}
       data-render-scale={adaptiveDpr.toFixed(2)}
       data-fps={measuredFps}
       data-frame-p95={renderTelemetry.frameTimeP95}
@@ -154,6 +169,8 @@ export function LaunchStage({
       data-shot-dolly={cue.camera.shot.positionArc[2].toFixed(2)}
       data-shot-roll={cue.camera.shot.roll.toFixed(3)}
       data-glass-instances={OPTICAL_PANEL_LAYOUT.length}
+      data-evidence-active={state.dynamicChartVisible}
+      data-evidence-points={launchEvidence.points.length}
       data-cue-effective-duration={Math.round(scaleCueDuration(cue.transition.durationMs, cuePace))}
       data-cue-pace={cuePace.toFixed(3)}
       data-world-drift={cue.environment.drift.toFixed(2)}
@@ -200,7 +217,7 @@ export function LaunchStage({
             ));
           }}
         >
-          <AdaptiveDpr />
+          {state.quality === 'high' ? <AdaptiveDpr /> : null}
           <TransitionPerformanceRegressor eventId={state.activeEvent} />
           <RenderTelemetryProbe effectsEnabled={effectsEnabled} onChange={setRenderTelemetry} />
           <LaunchScene
@@ -217,8 +234,11 @@ export function LaunchStage({
 
       <KineticStageCopy cue={cue} eventId={state.activeEvent} pace={cuePace} />
 
-      <div className="stage-performance" aria-label="Adaptive render performance">
-        <span>AUTO</span>
+      <div
+        className="stage-performance"
+        aria-label={state.quality === 'high' ? 'Adaptive render performance' : 'Fixed render performance'}
+      >
+        <span>{state.quality === 'high' ? 'AUTO' : 'FIXED'}</span>
         <strong>{measuredFps > 0 ? `${measuredFps} FPS` : 'CALIBRATING'}</strong>
         <i>
           {(renderTelemetry.pixelRatio || adaptiveDpr).toFixed(2)}x
@@ -239,22 +259,7 @@ export function LaunchStage({
         </button>
       ) : null}
 
-      <aside className={state.dynamicChartVisible ? 'stage-dynamic-panel visible' : 'stage-dynamic-panel'}>
-        <span>Summoned dynamic</span>
-        <strong>Year-over-year projections</strong>
-        <div className="stage-chart-summary">
-          <b>+38%</b>
-          <small>projected growth</small>
-        </div>
-        <div className="stage-chart-bars" aria-label="Projected revenue increases from fiscal year 2024 through 2027">
-          {['FY24', 'FY25', 'FY26', 'FY27'].map((year) => (
-            <div key={year}>
-              <i />
-              <small>{year}</small>
-            </div>
-          ))}
-        </div>
-      </aside>
+      <EvidenceReadout visible={state.dynamicChartVisible} />
     </section>
   );
 }
@@ -401,6 +406,35 @@ function StageCopyLayer({
   );
 }
 
+function EvidenceReadout({ visible }: { visible: boolean }) {
+  return (
+    <aside
+      aria-hidden={!visible}
+      aria-label={launchEvidence.title}
+      aria-live="polite"
+      className={visible ? 'stage-evidence-readout visible' : 'stage-evidence-readout'}
+    >
+      <div className="stage-evidence-heading">
+        <span>{launchEvidence.kicker}</span>
+        <small>{launchEvidence.range}</small>
+      </div>
+      <strong>{launchEvidence.title}</strong>
+      <div className="stage-evidence-metric">
+        <b>{launchEvidence.metric}</b>
+        <span>{launchEvidence.metricLabel}</span>
+      </div>
+      <ol className="stage-evidence-series">
+        {launchEvidence.points.map((point, index) => (
+          <li key={point.label} style={{ '--evidence-index': index } as CSSProperties}>
+            <small>{point.label}</small>
+            <b>{point.displayValue}</b>
+          </li>
+        ))}
+      </ol>
+    </aside>
+  );
+}
+
 interface LaunchSceneProps {
   cue: CinematicCue;
   effectsEnabled: boolean;
@@ -464,6 +498,7 @@ function LaunchScene({
       <SilkField cue={cue} motion={motion} />
       <SilkField cue={cue} foreground motion={motion} />
       <OpticalArray cue={cue} motion={motion} />
+      <EvidenceField cue={cue} enabled={state.dynamicChartVisible} motion={motion} />
       <HeroMonolith cue={cue} motion={motion} />
       <NetworkBloom cue={cue} motion={motion} />
 
@@ -1599,6 +1634,322 @@ function OpticalArray({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
         vertexShader={opticalArrayVertexShader}
       />
     </instancedMesh>
+  );
+}
+
+const evidenceColumnVertexShader = /* glsl */ `
+  attribute float aPhase;
+  varying float vHeight;
+  varying float vPhase;
+  varying vec3 vNormal;
+  varying vec3 vViewPosition;
+
+  void main() {
+    vHeight = position.y + 0.5;
+    vPhase = aPhase;
+    vec4 instancePosition = instanceMatrix * vec4(position, 1.0);
+    vec4 viewPosition = modelViewMatrix * instancePosition;
+    vNormal = normalize(normalMatrix * mat3(instanceMatrix) * normal);
+    vViewPosition = viewPosition.xyz;
+    gl_Position = projectionMatrix * viewPosition;
+  }
+`;
+
+const evidenceColumnFragmentShader = /* glsl */ `
+  uniform vec3 uAccent;
+  uniform float uOpacity;
+  uniform vec3 uPrimary;
+  uniform vec3 uSecondary;
+  uniform float uTime;
+  varying float vHeight;
+  varying float vPhase;
+  varying vec3 vNormal;
+  varying vec3 vViewPosition;
+
+  void main() {
+    vec3 normal = normalize(vNormal);
+    vec3 viewDirection = normalize(-vViewPosition);
+    float fresnel = pow(1.0 - clamp(abs(dot(normal, viewDirection)), 0.0, 1.0), 1.75);
+    float vertical = smoothstep(0.0, 1.0, vHeight);
+    float scanWave = sin(vHeight * 26.0 - uTime * 1.8 + vPhase * 6.28318) * 0.5 + 0.5;
+    float scan = pow(smoothstep(0.72, 1.0, scanWave), 4.0);
+    float cap = smoothstep(0.82, 1.0, vHeight);
+    vec3 color = mix(uPrimary, uSecondary, vertical * 0.58);
+    color = mix(color, uAccent, cap * 0.72 + scan * 0.16);
+    float alpha = (0.09 + fresnel * 0.42 + cap * 0.2 + scan * 0.08) * uOpacity;
+    if (alpha < 0.003) discard;
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+const evidenceCurveVertexShader = /* glsl */ `
+  varying float vAlong;
+
+  void main() {
+    vAlong = uv.x;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const evidenceCurveFragmentShader = /* glsl */ `
+  uniform vec3 uAccent;
+  uniform float uOpacity;
+  uniform vec3 uPrimary;
+  uniform float uReveal;
+  uniform float uTime;
+  varying float vAlong;
+
+  void main() {
+    float edge = 1.0 - smoothstep(uReveal - 0.035, uReveal + 0.012, vAlong);
+    float pulsePosition = fract(uTime * 0.16);
+    float pulseDistance = min(abs(vAlong - pulsePosition), 1.0 - abs(vAlong - pulsePosition));
+    float pulse = exp(-pulseDistance * pulseDistance * 420.0);
+    vec3 color = mix(uPrimary, uAccent, vAlong * 0.7 + pulse * 0.3);
+    gl_FragColor = vec4(color, (0.52 + pulse * 0.48) * edge * uOpacity);
+  }
+`;
+
+function EvidenceField({
+  cue,
+  enabled,
+  motion,
+}: {
+  cue: CinematicCue;
+  enabled: boolean;
+  motion: StageMotionBus;
+}) {
+  const groupRef = useRef<Group>(null);
+  const columnsRef = useRef<InstancedMesh>(null);
+  const curveRef = useRef<Mesh>(null);
+  const columnMaterialRef = useRef<ShaderMaterial>(null);
+  const curveMaterialRef = useRef<ShaderMaterial>(null);
+  const revealRef = useRef(0);
+  const columns = useMemo(
+    () => Array.from(EVIDENCE_HEIGHTS, (_, index) => {
+      const column = new Object3D();
+      column.position.set(EVIDENCE_COLUMN_X[index], EVIDENCE_BASE_Y, index * 0.018);
+      column.scale.set(0.001, 0.001, 0.001);
+      column.updateMatrix();
+      return column;
+    }),
+    [],
+  );
+  const paletteTargets = useMemo(
+    () => ({
+      primary: new Color(cue.palette.primary),
+      secondary: new Color(cue.palette.secondary),
+      accent: new Color(cue.palette.accent),
+    }),
+    [],
+  );
+  const columnUniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uOpacity: { value: 0 },
+    uPrimary: { value: new Color(cue.palette.primary) },
+    uSecondary: { value: new Color(cue.palette.secondary) },
+    uAccent: { value: new Color(cue.palette.accent) },
+  }), []);
+  const curveUniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uReveal: { value: 0 },
+    uOpacity: { value: 0 },
+    uPrimary: { value: new Color(cue.palette.primary) },
+    uAccent: { value: new Color(cue.palette.accent) },
+  }), []);
+
+  useLayoutEffect(() => {
+    if (!columnsRef.current) return;
+    columnsRef.current.instanceMatrix.setUsage(DynamicDrawUsage);
+    columns.forEach((column, index) => columnsRef.current?.setMatrixAt(index, column.matrix));
+    columnsRef.current.instanceMatrix.needsUpdate = true;
+  }, [columns]);
+
+  useFrame(({ clock, size }, delta) => {
+    if (
+      !groupRef.current
+      || !columnsRef.current
+      || !curveRef.current
+      || !columnMaterialRef.current
+      || !curveMaterialRef.current
+    ) return;
+
+    const damping = phaseDamping(cue.transition.damping, motion.actorArrival, motion.handoff);
+    const actorDamping = enabled ? damping : Math.max(damping, 8);
+    const paletteAlpha = 1 - Math.exp(-damping * delta);
+    const elapsed = clock.getElapsedTime();
+    const targetScale = enabled ? cue.composition.chartScale : 0;
+    if (enabled) {
+      revealRef.current = Math.max(
+        revealRef.current,
+        MathUtils.smoothstep(motion.actorArrival, 0.04, 0.9),
+      );
+    } else {
+      revealRef.current = 0;
+    }
+    const reveal = revealRef.current;
+    const portraitMix = 1 - MathUtils.smoothstep(size.width / size.height, 0.72, 1.25);
+    const responsiveScale = 1 - portraitMix * 0.2;
+    const targetX = MathUtils.lerp(cue.evidence.position[0], 0, portraitMix);
+    const targetY = MathUtils.lerp(cue.evidence.position[1], 0.98, portraitMix);
+    const targetZ = cue.evidence.position[2] - portraitMix * 0.15;
+
+    groupRef.current.position.x = MathUtils.damp(groupRef.current.position.x, targetX, damping, delta);
+    groupRef.current.position.y = MathUtils.damp(groupRef.current.position.y, targetY, damping, delta);
+    groupRef.current.position.z = MathUtils.damp(groupRef.current.position.z, targetZ, damping, delta);
+    groupRef.current.rotation.x = MathUtils.damp(
+      groupRef.current.rotation.x,
+      cue.evidence.rotation[0],
+      damping,
+      delta,
+    );
+    groupRef.current.rotation.y = MathUtils.damp(
+      groupRef.current.rotation.y,
+      cue.evidence.rotation[1] * (1 - portraitMix * 0.65),
+      damping,
+      delta,
+    );
+    groupRef.current.rotation.z = MathUtils.damp(
+      groupRef.current.rotation.z,
+      cue.evidence.rotation[2],
+      damping,
+      delta,
+    );
+    const groupScale = MathUtils.damp(
+      groupRef.current.scale.x,
+      responsiveScale,
+      damping,
+      delta,
+    );
+    groupRef.current.scale.setScalar(groupScale);
+
+    for (let index = 0; index < columns.length; index += 1) {
+      const column = columns[index];
+      const stagger = MathUtils.smoothstep(
+        reveal,
+        index * 0.115,
+        0.62 + index * 0.075,
+      );
+      const baseHeight = 0.55 + EVIDENCE_HEIGHTS[index] * 1.35;
+      const targetHeight = Math.max(0.001, baseHeight * targetScale * stagger);
+      const targetWidth = Math.max(0.001, 0.34 * targetScale * (0.7 + stagger * 0.3));
+      column.position.x = MathUtils.damp(
+        column.position.x,
+        EVIDENCE_COLUMN_X[index] * cue.evidence.spread,
+        damping,
+        delta,
+      );
+      column.position.y = MathUtils.damp(
+        column.position.y,
+        EVIDENCE_BASE_Y + targetHeight * 0.5 + motion.voiceLevel * 0.018 * (index + 1),
+        actorDamping,
+        delta,
+      );
+      column.position.z = MathUtils.damp(
+        column.position.z,
+        index * 0.018 + Math.sin(elapsed * 0.24 + index) * 0.018 * cue.motionEnergy,
+        damping,
+        delta,
+      );
+      column.scale.x = MathUtils.damp(column.scale.x, targetWidth, actorDamping, delta);
+      column.scale.y = MathUtils.damp(column.scale.y, targetHeight, actorDamping, delta);
+      column.scale.z = MathUtils.damp(column.scale.z, targetWidth * 0.72, actorDamping, delta);
+      column.updateMatrix();
+      columnsRef.current.setMatrixAt(index, column.matrix);
+    }
+    columnsRef.current.instanceMatrix.needsUpdate = true;
+
+    curveRef.current.scale.x = MathUtils.damp(
+      curveRef.current.scale.x,
+      cue.evidence.spread,
+      actorDamping,
+      delta,
+    );
+    const curveHeightScale = MathUtils.damp(
+      curveRef.current.scale.y,
+      targetScale,
+      actorDamping,
+      delta,
+    );
+    curveRef.current.scale.y = curveHeightScale;
+    curveRef.current.scale.z = MathUtils.damp(curveRef.current.scale.z, 1, actorDamping, delta);
+    curveRef.current.position.y = MathUtils.damp(
+      curveRef.current.position.y,
+      EVIDENCE_BASE_Y * (1 - targetScale),
+      actorDamping,
+      delta,
+    );
+    groupRef.current.visible = curveHeightScale > 0.018 || columns[3].scale.y > 0.018;
+
+    paletteTargets.primary.set(cue.palette.primary);
+    paletteTargets.secondary.set(cue.palette.secondary);
+    paletteTargets.accent.set(cue.palette.accent);
+    columnMaterialRef.current.uniforms.uTime.value = elapsed;
+    columnMaterialRef.current.uniforms.uOpacity.value = MathUtils.damp(
+      columnMaterialRef.current.uniforms.uOpacity.value,
+      enabled ? 0.82 + motion.voiceLevel * 0.1 : 0,
+      actorDamping,
+      delta,
+    );
+    columnMaterialRef.current.uniforms.uPrimary.value.lerp(paletteTargets.primary, paletteAlpha);
+    columnMaterialRef.current.uniforms.uSecondary.value.lerp(paletteTargets.secondary, paletteAlpha);
+    columnMaterialRef.current.uniforms.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
+    curveMaterialRef.current.uniforms.uTime.value = elapsed;
+    curveMaterialRef.current.uniforms.uReveal.value = MathUtils.damp(
+      curveMaterialRef.current.uniforms.uReveal.value,
+      reveal,
+      actorDamping,
+      delta,
+    );
+    curveMaterialRef.current.uniforms.uOpacity.value = MathUtils.damp(
+      curveMaterialRef.current.uniforms.uOpacity.value,
+      enabled ? 0.9 + motion.voicePeak * 0.08 : 0,
+      actorDamping,
+      delta,
+    );
+    curveMaterialRef.current.uniforms.uPrimary.value.lerp(paletteTargets.primary, paletteAlpha);
+    curveMaterialRef.current.uniforms.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
+  });
+
+  return (
+    <group
+      ref={groupRef}
+      position={cue.evidence.position}
+      rotation={cue.evidence.rotation}
+    >
+      <instancedMesh
+        ref={columnsRef}
+        args={[undefined, undefined, launchEvidence.points.length]}
+        frustumCulled={false}
+      >
+        <boxGeometry args={[1, 1, 1]}>
+          <instancedBufferAttribute
+            attach="attributes-aPhase"
+            args={[EVIDENCE_COLUMN_PHASES, 1]}
+          />
+        </boxGeometry>
+        <shaderMaterial
+          ref={columnMaterialRef}
+          blending={AdditiveBlending}
+          depthWrite={false}
+          fragmentShader={evidenceColumnFragmentShader}
+          transparent
+          uniforms={columnUniforms}
+          vertexShader={evidenceColumnVertexShader}
+        />
+      </instancedMesh>
+      <mesh ref={curveRef} frustumCulled={false} renderOrder={8} scale={[1, 0.001, 1]}>
+        <tubeGeometry args={[EVIDENCE_CURVE, 48, 0.018, 6, false]} />
+        <shaderMaterial
+          ref={curveMaterialRef}
+          blending={AdditiveBlending}
+          depthWrite={false}
+          fragmentShader={evidenceCurveFragmentShader}
+          transparent
+          uniforms={curveUniforms}
+          vertexShader={evidenceCurveVertexShader}
+        />
+      </mesh>
+    </group>
   );
 }
 

@@ -61,6 +61,11 @@ export interface CinematicCue {
     heroY: number;
     heroYaw: number;
   };
+  evidence: {
+    position: Vector3Tuple;
+    rotation: Vector3Tuple;
+    spread: number;
+  };
   lighting: {
     key: number;
     rim: number;
@@ -95,7 +100,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 8;
+  schemaVersion: 9;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -113,7 +118,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 8,
+  schemaVersion: 9,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -179,6 +184,11 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroX: 0.25,
         heroY: 0.22,
         heroYaw: 0.08,
+      },
+      evidence: {
+        position: [1.7, -0.18, -0.42],
+        rotation: [-0.04, -0.16, 0.01],
+        spread: 0.96,
       },
       lighting: { key: 1.85, rim: 3.8, accent: 2.6 },
       environment: {
@@ -270,6 +280,11 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroY: 0.28,
         heroYaw: -0.2,
       },
+      evidence: {
+        position: [1.7, -0.18, -0.42],
+        rotation: [-0.04, -0.16, 0.01],
+        spread: 0.96,
+      },
       lighting: { key: 2.7, rim: 5.2, accent: 3.4 },
       environment: {
         glow: 0.62,
@@ -359,6 +374,11 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroX: 1.15,
         heroY: 0.18,
         heroYaw: 0.16,
+      },
+      evidence: {
+        position: [1.7, -0.18, -0.42],
+        rotation: [-0.04, -0.16, 0.01],
+        spread: 0.96,
       },
       lighting: { key: 2.25, rim: 4.4, accent: 4.2 },
       environment: {
@@ -450,6 +470,11 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroY: 0.08,
         heroYaw: -0.12,
       },
+      evidence: {
+        position: [1.7, -0.18, -0.42],
+        rotation: [-0.04, -0.16, 0.01],
+        spread: 0.96,
+      },
       lighting: { key: 2.05, rim: 3.6, accent: 3.1 },
       environment: {
         glow: 0.58,
@@ -539,6 +564,11 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroX: -1.05,
         heroY: 0.12,
         heroYaw: 0.2,
+      },
+      evidence: {
+        position: [1.72, -0.24, -0.3],
+        rotation: [-0.035, -0.2, 0.015],
+        spread: 1.08,
       },
       lighting: { key: 2.4, rim: 4.8, accent: 4.6 },
       environment: {
@@ -630,6 +660,11 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroY: 0.16,
         heroYaw: 0.05,
       },
+      evidence: {
+        position: [1.68, -0.2, -0.4],
+        rotation: [-0.04, -0.16, 0.01],
+        spread: 0.98,
+      },
       lighting: { key: 1.8, rim: 3.1, accent: 2.3 },
       environment: {
         glow: 0.18,
@@ -719,6 +754,11 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroX: 0.65,
         heroY: 0.22,
         heroYaw: -0.08,
+      },
+      evidence: {
+        position: [1.5, -0.18, -0.34],
+        rotation: [-0.03, -0.12, 0.01],
+        spread: 1.02,
       },
       lighting: { key: 2.8, rim: 5.3, accent: 3.8 },
       environment: {

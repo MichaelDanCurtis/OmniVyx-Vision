@@ -8,7 +8,7 @@ import { stageEvents } from './stageScore';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(8);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(9);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -43,6 +43,9 @@ describe('cinematicScore', () => {
         cue.media.drift,
         cue.media.tintStrength,
         ...Object.values(cue.composition),
+        ...cue.evidence.position,
+        ...cue.evidence.rotation,
+        cue.evidence.spread,
         ...Object.values(cue.lighting),
         cue.environment.glow,
         ...cue.environment.glowPosition,
@@ -94,6 +97,7 @@ describe('cinematicScore', () => {
       expect(cue.media.opacity).toBeGreaterThanOrEqual(0);
       expect(cue.media.opacity).toBeLessThanOrEqual(1);
       expect(cue.media.scale).toBeGreaterThan(0);
+      expect(cue.evidence.spread).toBeGreaterThan(0);
       expect(cue.environment.glow).toBeGreaterThanOrEqual(0);
       expect(cue.environment.glow).toBeLessThanOrEqual(1);
       expect(cue.environment.glowPosition.every((value) => value >= -1 && value <= 1)).toBe(true);
