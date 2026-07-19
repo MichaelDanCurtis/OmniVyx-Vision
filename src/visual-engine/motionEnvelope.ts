@@ -5,6 +5,8 @@ export interface CueMotionSample {
   overshoot: number;
 }
 
+export type MotionPhaseWindow = readonly [start: number, end: number];
+
 export function sampleCueMotion(
   elapsedMs: number,
   durationMs: number,
@@ -38,4 +40,25 @@ export function decayImpulse(value: number, deltaSeconds: number, lambda = 5): n
 
   const next = value * Math.exp(-lambda * deltaSeconds);
   return next < 0.0001 ? 0 : next;
+}
+
+export function samplePhaseWindow(
+  progress: number,
+  [start, end]: MotionPhaseWindow,
+): number {
+  if (!Number.isFinite(progress) || progress < 0 || progress > 1) {
+    throw new Error('Phase progress must be a finite value between zero and one.');
+  }
+  if (
+    !Number.isFinite(start)
+    || !Number.isFinite(end)
+    || start < 0
+    || end > 1
+    || start >= end
+  ) {
+    throw new Error('Phase window must be an increasing interval between zero and one.');
+  }
+
+  const normalized = Math.min(1, Math.max(0, (progress - start) / (end - start)));
+  return normalized * normalized * (3 - 2 * normalized);
 }

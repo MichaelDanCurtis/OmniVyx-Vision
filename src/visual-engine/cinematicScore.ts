@@ -1,4 +1,5 @@
 import type { StageEventId } from './stageScore';
+import type { MotionPhaseWindow } from './motionEnvelope';
 
 export type Vector3Tuple = readonly [number, number, number];
 export type Vector2Tuple = readonly [number, number];
@@ -22,6 +23,12 @@ export interface CinematicCue {
     copyOffset: Vector2Tuple;
     sweepAngle: number;
     sweepIntensity: number;
+    staging: {
+      camera: MotionPhaseWindow;
+      media: MotionPhaseWindow;
+      actors: MotionPhaseWindow;
+      copy: MotionPhaseWindow;
+    };
   };
   media: {
     asset: string;
@@ -57,7 +64,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 3;
+  schemaVersion: 4;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -75,7 +82,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -95,6 +102,12 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [0, 36],
         sweepAngle: 0.15,
         sweepIntensity: 0.74,
+        staging: {
+          camera: [0, 0.42],
+          media: [0.02, 0.78],
+          actors: [0.16, 0.86],
+          copy: [0.22, 0.72],
+        },
       },
       media: {
         asset: '/engine/optical-master-v1.jpg',
@@ -139,6 +152,12 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [-72, 12],
         sweepAngle: 0,
         sweepIntensity: 0.95,
+        staging: {
+          camera: [0, 0.38],
+          media: [0.04, 0.72],
+          actors: [0.12, 0.78],
+          copy: [0.18, 0.68],
+        },
       },
       media: {
         asset: '/engine/optical-master-v1.jpg',
@@ -183,6 +202,12 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [0, 42],
         sweepAngle: 1.15,
         sweepIntensity: 0.8,
+        staging: {
+          camera: [0, 0.46],
+          media: [0.08, 0.78],
+          actors: [0.16, 0.84],
+          copy: [0.24, 0.76],
+        },
       },
       media: {
         asset: '/engine/optical-master-v1.jpg',
@@ -227,6 +252,12 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [46, 28],
         sweepAngle: -0.55,
         sweepIntensity: 0.88,
+        staging: {
+          camera: [0, 0.44],
+          media: [0.06, 0.82],
+          actors: [0.2, 0.92],
+          copy: [0.24, 0.78],
+        },
       },
       media: {
         asset: '/engine/optical-master-v1.jpg',
@@ -271,6 +302,12 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [84, 0],
         sweepAngle: 3.1416,
         sweepIntensity: 1.1,
+        staging: {
+          camera: [0, 0.32],
+          media: [0.02, 0.58],
+          actors: [0.1, 0.68],
+          copy: [0.16, 0.54],
+        },
       },
       media: {
         asset: '/engine/optical-master-v1.jpg',
@@ -315,6 +352,12 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [0, 14],
         sweepAngle: 1.5708,
         sweepIntensity: 0.25,
+        staging: {
+          camera: [0, 0.58],
+          media: [0.12, 0.9],
+          actors: [0.24, 0.94],
+          copy: [0.28, 0.78],
+        },
       },
       media: {
         asset: '/engine/optical-master-v1.jpg',
@@ -359,6 +402,12 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [-40, 32],
         sweepAngle: 0.35,
         sweepIntensity: 1,
+        staging: {
+          camera: [0, 0.42],
+          media: [0.05, 0.76],
+          actors: [0.16, 0.86],
+          copy: [0.24, 0.74],
+        },
       },
       media: {
         asset: '/engine/optical-master-v1.jpg',

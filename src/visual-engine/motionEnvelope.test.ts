@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decayImpulse, sampleCueMotion } from './motionEnvelope';
+import { decayImpulse, sampleCueMotion, samplePhaseWindow } from './motionEnvelope';
 
 describe('motionEnvelope', () => {
   it('starts with impact and settles on the authored target', () => {
@@ -34,5 +34,12 @@ describe('motionEnvelope', () => {
 
     expect(twoHalfFrames).toBeCloseTo(oneFrame, 10);
     expect(() => decayImpulse(-1, 1 / 60)).toThrow(/non-negative finite/);
+  });
+
+  it('stages layer motion inside an authored normalized window', () => {
+    expect(samplePhaseWindow(0.1, [0.2, 0.8])).toBe(0);
+    expect(samplePhaseWindow(0.5, [0.2, 0.8])).toBeCloseTo(0.5, 8);
+    expect(samplePhaseWindow(0.9, [0.2, 0.8])).toBe(1);
+    expect(() => samplePhaseWindow(0.5, [0.8, 0.2])).toThrow(/increasing interval/);
   });
 });

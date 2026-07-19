@@ -2,7 +2,14 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { EffectComposer, Bloom, DepthOfField, Vignette } from '@react-three/postprocessing';
 import { AdaptiveDpr, PerformanceMonitor, RoundedBox } from '@react-three/drei';
 import { Maximize2, Minimize2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import {
   AdditiveBlending,
   BackSide,
@@ -25,19 +32,32 @@ import { getCinematicCue, type CinematicCue } from './cinematicScore';
 import {
   decayImpulse,
   sampleCueMotion,
+  samplePhaseWindow,
   type CueMotionSample,
 } from './motionEnvelope';
 import { CinematicMediaPlate } from './CinematicMediaPlate';
+import {
+  createFrameTimeHistogram,
+  readFrameTimePercentile,
+  recordFrameDuration,
+  resetFrameTimeHistogram,
+} from './renderTelemetry';
 import type { StageEventId, StageState } from './stageScore';
 
 interface StageMotionBus extends CueMotionSample {
+  actorArrival: number;
+  cameraArrival: number;
   elapsedMs: number;
+  mediaArrival: number;
   voiceImpulse: number;
 }
 
 interface RenderTelemetry {
   calls: number;
+  frameTimeP95: number;
   fps: number;
+  longFrames: number;
+  pixelRatio: number;
   triangles: number;
 }
 
@@ -61,7 +81,10 @@ export function LaunchStage({
   });
   const [renderTelemetry, setRenderTelemetry] = useState<RenderTelemetry>({
     calls: 0,
+    frameTimeP95: 0,
     fps: 0,
+    longFrames: 0,
+    pixelRatio: 0,
     triangles: 0,
   });
   const adaptiveDpr = state.quality === 'high'
@@ -84,18 +107,16 @@ export function LaunchStage({
       data-quality={state.quality}
       data-render-scale={adaptiveDpr.toFixed(2)}
       data-fps={measuredFps}
+      data-frame-p95={renderTelemetry.frameTimeP95}
+      data-long-frames={renderTelemetry.longFrames}
       data-draw-calls={renderTelemetry.calls}
+      data-pixel-ratio={renderTelemetry.pixelRatio.toFixed(2)}
       data-triangles={renderTelemetry.triangles}
       data-media-tempo={state.mediaPlaybackRate.toFixed(2)}
       data-presenter-pulse={presenterPulse}
       style={{
         '--stage-primary': cue.palette.primary,
         '--stage-accent': cue.palette.accent,
-        '--cue-copy-duration': `${clamp(cue.transition.durationMs * 0.52, 420, 900)}ms`,
-        '--cue-copy-delay': `${cue.transition.copyDelayMs}ms`,
-        '--cue-copy-x': `${cue.transition.copyOffset[0]}px`,
-        '--cue-copy-y': `${cue.transition.copyOffset[1]}px`,
-        '--cue-line-stagger': `${clamp(cue.transition.durationMs * 0.055, 48, 86)}ms`,
         '--cue-panel-duration': `${clamp(cue.transition.durationMs * 0.34, 260, 520)}ms`,
       } as CSSProperties}
     >
@@ -136,22 +157,16 @@ export function LaunchStage({
         </PerformanceMonitor>
       </Canvas>
 
-      <div className="visual-engine-copy" key={state.activeEvent}>
-        <p className="eyebrow">{cue.copy.eyebrow}</p>
-        <h2 aria-label={cue.copy.headline}>
-          {cue.copy.headlineLines.map((line, index) => (
-            <span className="stage-copy-line" key={line} aria-hidden="true">
-              <span style={{ '--line-index': index } as CSSProperties}>{line}</span>
-            </span>
-          ))}
-        </h2>
-        <p>{cue.copy.body}</p>
-      </div>
+      <KineticStageCopy cue={cue} eventId={state.activeEvent} />
 
       <div className="stage-performance" aria-label="Adaptive render performance">
         <span>AUTO</span>
         <strong>{measuredFps > 0 ? `${measuredFps} FPS` : 'CALIBRATING'}</strong>
-        <i>{adaptiveDpr.toFixed(2)}x / {renderTelemetry.calls || '-'} calls</i>
+        <i>
+          {(renderTelemetry.pixelRatio || adaptiveDpr).toFixed(2)}x
+          {' / '}p95 {renderTelemetry.frameTimeP95 || '-'}ms
+          {' / '}{renderTelemetry.calls || '-'} calls
+        </i>
       </div>
 
       {onTogglePresenting ? (
@@ -186,6 +201,95 @@ export function LaunchStage({
   );
 }
 
+interface CopyLayerState {
+  cue: CinematicCue;
+  eventId: StageEventId;
+  exitDurationMs: number;
+}
+
+function KineticStageCopy({ cue, eventId }: { cue: CinematicCue; eventId: StageEventId }) {
+  const previousRef = useRef({ cue, eventId });
+  const [outgoing, setOutgoing] = useState<CopyLayerState | null>(null);
+
+  useLayoutEffect(() => {
+    const previous = previousRef.current;
+    previousRef.current = { cue, eventId };
+    if (previous.eventId === eventId) return;
+
+    const exitDurationMs = clamp(previous.cue.transition.durationMs * 0.34, 260, 560);
+    setOutgoing({ ...previous, exitDurationMs });
+    const timer = window.setTimeout(() => setOutgoing(null), exitDurationMs);
+    return () => window.clearTimeout(timer);
+  }, [cue, eventId]);
+
+  return (
+    <>
+      {outgoing ? (
+        <StageCopyLayer
+          cue={outgoing.cue}
+          eventId={outgoing.eventId}
+          exitDurationMs={outgoing.exitDurationMs}
+          key={`${outgoing.eventId}-out`}
+          outgoing
+        />
+      ) : null}
+      <StageCopyLayer cue={cue} eventId={eventId} key={`${eventId}-in`} />
+    </>
+  );
+}
+
+function StageCopyLayer({
+  cue,
+  eventId,
+  exitDurationMs = 0,
+  outgoing = false,
+}: {
+  cue: CinematicCue;
+  eventId: StageEventId;
+  exitDurationMs?: number;
+  outgoing?: boolean;
+}) {
+  const copyWindow = cue.transition.staging.copy;
+  const copyDurationMs = clamp(
+    cue.transition.durationMs * (copyWindow[1] - copyWindow[0]) * 1.25,
+    420,
+    840,
+  );
+  const copyDelayMs = cue.transition.copyDelayMs
+    + cue.transition.durationMs * copyWindow[0];
+  const style = {
+    '--cue-copy-duration': `${copyDurationMs}ms`,
+    '--cue-copy-delay': `${copyDelayMs}ms`,
+    '--cue-copy-x': `${cue.transition.copyOffset[0]}px`,
+    '--cue-copy-y': `${cue.transition.copyOffset[1]}px`,
+    '--cue-line-stagger': `${clamp(cue.transition.durationMs * 0.055, 48, 86)}ms`,
+    '--cue-exit-duration': `${exitDurationMs}ms`,
+    '--cue-exit-x': `${cue.transition.copyOffset[0] * -0.32}px`,
+    '--cue-exit-y': `${cue.transition.copyOffset[1] * -0.24 - 6}px`,
+  } as CSSProperties;
+
+  return (
+    <div
+      aria-hidden={outgoing || undefined}
+      className={outgoing
+        ? 'visual-engine-copy stage-copy-outgoing'
+        : 'visual-engine-copy stage-copy-current'}
+      data-copy-event={eventId}
+      style={style}
+    >
+      <p className="eyebrow">{cue.copy.eyebrow}</p>
+      <h2 aria-label={outgoing ? undefined : cue.copy.headline}>
+        {cue.copy.headlineLines.map((line, index) => (
+          <span className="stage-copy-line" key={line} aria-hidden="true">
+            <span style={{ '--line-index': index } as CSSProperties}>{line}</span>
+          </span>
+        ))}
+      </h2>
+      <p>{cue.copy.body}</p>
+    </div>
+  );
+}
+
 interface LaunchSceneProps {
   cue: CinematicCue;
   effectsEnabled: boolean;
@@ -195,7 +299,10 @@ interface LaunchSceneProps {
 
 function LaunchScene({ cue, effectsEnabled, presenterPulse, state }: LaunchSceneProps) {
   const motion = useMemo<StageMotionBus>(() => ({
+    actorArrival: 0,
+    cameraArrival: 0,
     elapsedMs: 0,
+    mediaArrival: 0,
     progress: 0,
     arrival: 0,
     impact: 1,
@@ -261,6 +368,9 @@ function MotionDirector({
     motion.arrival = 0;
     motion.impact = 1;
     motion.overshoot = 0;
+    motion.actorArrival = 0;
+    motion.cameraArrival = 0;
+    motion.mediaArrival = 0;
   }, [eventId, motion]);
 
   useEffect(() => {
@@ -269,6 +379,18 @@ function MotionDirector({
 
   useFrame((_, delta) => {
     sampleCueMotion(motion.elapsedMs, cue.transition.durationMs, motion);
+    motion.cameraArrival = samplePhaseWindow(
+      motion.progress,
+      cue.transition.staging.camera,
+    );
+    motion.mediaArrival = samplePhaseWindow(
+      motion.progress,
+      cue.transition.staging.media,
+    );
+    motion.actorArrival = samplePhaseWindow(
+      motion.progress,
+      cue.transition.staging.actors,
+    );
     motion.elapsedMs += delta * 1_000;
     motion.voiceImpulse = decayImpulse(motion.voiceImpulse, delta, 4.8);
   });
@@ -294,32 +416,43 @@ function RenderTelemetryProbe({
   onChange: (telemetry: RenderTelemetry) => void;
 }) {
   const gl = useThree((threeState) => threeState.gl);
+  const frameHistogram = useMemo(createFrameTimeHistogram, []);
   const lastReportRef = useRef(0);
   const frameCountRef = useRef(0);
+  const longFrameCountRef = useRef(0);
   const lastCallsRef = useRef(-1);
+  const lastFrameTimeP95Ref = useRef(-1);
   const lastFpsRef = useRef(-1);
+  const lastLongFramesRef = useRef(-1);
+  const lastPixelRatioRef = useRef(-1);
   const lastTrianglesRef = useRef(-1);
 
   useEffect(() => {
     gl.info.autoReset = !effectsEnabled;
     gl.info.reset();
     frameCountRef.current = 0;
+    longFrameCountRef.current = 0;
     lastReportRef.current = 0;
+    resetFrameTimeHistogram(frameHistogram);
     return () => {
       gl.info.autoReset = true;
       gl.info.reset();
     };
-  }, [effectsEnabled, gl]);
+  }, [effectsEnabled, frameHistogram, gl]);
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const now = clock.getElapsedTime();
     frameCountRef.current += 1;
+    recordFrameDuration(frameHistogram, delta);
+    if (delta > 0.024) longFrameCountRef.current += 1;
     const calls = gl.info.render.calls;
     const triangles = gl.info.render.triangles;
     if (effectsEnabled) gl.info.reset();
     if (lastReportRef.current === 0) {
       lastReportRef.current = now;
       frameCountRef.current = 0;
+      longFrameCountRef.current = 0;
+      resetFrameTimeHistogram(frameHistogram);
       return;
     }
 
@@ -329,16 +462,27 @@ function RenderTelemetryProbe({
     lastReportRef.current = now;
     const fps = Math.round(frameCountRef.current / elapsed);
     frameCountRef.current = 0;
+    const frameTimeP95 = readFrameTimePercentile(frameHistogram, 0.95);
+    const longFrames = longFrameCountRef.current;
+    const pixelRatio = Math.round(gl.getPixelRatio() * 100) / 100;
+    longFrameCountRef.current = 0;
+    resetFrameTimeHistogram(frameHistogram);
     if (
       calls === lastCallsRef.current
+      && frameTimeP95 === lastFrameTimeP95Ref.current
       && fps === lastFpsRef.current
+      && longFrames === lastLongFramesRef.current
+      && pixelRatio === lastPixelRatioRef.current
       && triangles === lastTrianglesRef.current
     ) return;
 
     lastCallsRef.current = calls;
+    lastFrameTimeP95Ref.current = frameTimeP95;
     lastFpsRef.current = fps;
+    lastLongFramesRef.current = longFrames;
+    lastPixelRatioRef.current = pixelRatio;
     lastTrianglesRef.current = triangles;
-    onChange({ calls, fps, triangles });
+    onChange({ calls, frameTimeP95, fps, longFrames, pixelRatio, triangles });
   }, effectsEnabled ? 2 : 0);
 
   return null;
@@ -444,7 +588,7 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
   const accentTarget = useMemo(() => new Color(cue.palette.accent), []);
 
   useFrame((_, delta) => {
-    const damping = cue.transition.damping;
+    const damping = phaseDamping(cue.transition.damping, motion.actorArrival);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     keyTarget.set(cue.palette.secondary);
     rimTarget.set(cue.palette.primary);
@@ -493,7 +637,7 @@ function CameraRig({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus 
 
   useFrame(({ clock }, delta) => {
     const elapsed = clock.getElapsedTime();
-    const damping = cue.transition.damping;
+    const damping = phaseDamping(cue.transition.damping, motion.cameraArrival);
     const drift = cue.motionEnergy;
     camera.position.x = MathUtils.damp(
       camera.position.x,
@@ -539,6 +683,10 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+function phaseDamping(base: number, arrival: number): number {
+  return arrival <= 0 ? 0 : base * (0.32 + arrival * 1.08);
+}
+
 function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
   const pointsMaterialRef = useRef<PointsMaterial>(null);
   const targetColor = useMemo(() => new Color(cue.palette.primary), []);
@@ -554,21 +702,22 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
 
   useFrame((_, delta) => {
     if (!pointsMaterialRef.current) return;
+    const damping = phaseDamping(cue.transition.damping, motion.mediaArrival);
     targetColor.set(cue.palette.primary);
     pointsMaterialRef.current.color.lerp(
       targetColor,
-      1 - Math.exp(-cue.transition.damping * delta),
+      1 - Math.exp(-damping * delta),
     );
     pointsMaterialRef.current.opacity = MathUtils.damp(
       pointsMaterialRef.current.opacity,
       0.3 + motion.impact * 0.16 + motion.voiceImpulse * 0.1,
-      cue.transition.damping,
+      damping,
       delta,
     );
     pointsMaterialRef.current.size = MathUtils.damp(
       pointsMaterialRef.current.size,
       0.018 + motion.voiceImpulse * 0.006,
-      cue.transition.damping,
+      damping,
       delta,
     );
   });
@@ -650,9 +799,9 @@ const silkFragmentShader = /* glsl */ `
     vec3 color = mix(uSurface, iridescence, ridge * 0.58 + sheen * 0.46);
     color = mix(color, uSecondary, highlight * 0.52 + sheen * ridge * 0.28);
     float edgeFade = smoothstep(0.0, 0.18, vUv.x)
-      * smoothstep(1.0, 0.82, vUv.x)
+      * (1.0 - smoothstep(0.82, 1.0, vUv.x))
       * smoothstep(0.0, 0.16, vUv.y)
-      * smoothstep(1.0, 0.84, vUv.y);
+      * (1.0 - smoothstep(0.84, 1.0, vUv.y));
     float alpha = (0.2 + ridge * 0.34 + sheen * 0.34) * edgeFade * uOpacity;
     gl_FragColor = vec4(color, alpha);
   }
@@ -693,7 +842,8 @@ function SilkField({
 
   useFrame(({ clock }, delta) => {
     if (!materialRef.current || !meshRef.current) return;
-    const paletteAlpha = 1 - Math.exp(-cue.transition.damping * delta);
+    const damping = phaseDamping(cue.transition.damping, motion.actorArrival);
+    const paletteAlpha = 1 - Math.exp(-damping * delta);
     paletteTargets.primary.set(cue.palette.primary);
     paletteTargets.secondary.set(cue.palette.secondary);
     paletteTargets.accent.set(cue.palette.accent);
@@ -702,7 +852,7 @@ function SilkField({
     materialRef.current.uniforms.uEnergy.value = MathUtils.damp(
       materialRef.current.uniforms.uEnergy.value,
       cue.motionEnergy + motion.impact * 0.42 + motion.voiceImpulse * 0.3,
-      cue.transition.damping,
+      damping,
       delta,
     );
     materialRef.current.uniforms.uOpacity.value = MathUtils.damp(
@@ -712,7 +862,7 @@ function SilkField({
         : (foreground ? 0.88 : 1.08))
         + motion.voiceImpulse * 0.06
         + motion.impact * 0.05,
-      cue.transition.damping,
+      damping,
       delta,
     );
     materialRef.current.uniforms.uPrimary.value.lerp(paletteTargets.primary, paletteAlpha);
@@ -724,7 +874,7 @@ function SilkField({
       (foreground ? 0.72 : 0.05)
         + cue.composition.ribbonLift * (foreground ? 0.72 : 0.18)
         + motion.overshoot * (foreground ? 0.16 : 0.05),
-      cue.transition.damping,
+      damping,
       delta,
     );
   });
@@ -822,7 +972,7 @@ function OpticalPanel({ cue, index, motion, position, rotation }: OpticalPanelPr
   useFrame(({ clock }, delta) => {
     if (!paneRef.current || !materialRef.current) return;
     const elapsed = clock.getElapsedTime() + index * 1.7;
-    const damping = cue.transition.damping;
+    const damping = phaseDamping(cue.transition.damping, motion.actorArrival);
     const energy = cue.motionEnergy;
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     paneRef.current.position.x = MathUtils.damp(
@@ -906,7 +1056,7 @@ function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
 
   useFrame(({ clock }, delta) => {
     if (!groupRef.current) return;
-    const damping = cue.transition.damping;
+    const damping = phaseDamping(cue.transition.damping, motion.actorArrival);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     groupRef.current.position.x = MathUtils.damp(
       groupRef.current.position.x,
@@ -1100,7 +1250,7 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
 
   useFrame(({ clock }, delta) => {
     if (!groupRef.current) return;
-    const damping = cue.transition.damping;
+    const damping = phaseDamping(cue.transition.damping, motion.actorArrival);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     const scale = MathUtils.damp(
       groupRef.current.scale.x,

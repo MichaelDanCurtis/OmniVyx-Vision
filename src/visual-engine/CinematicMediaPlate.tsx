@@ -12,6 +12,7 @@ import type { CinematicCue } from './cinematicScore';
 
 interface MediaMotionState {
   impact: number;
+  mediaArrival: number;
   overshoot: number;
   voiceImpulse: number;
 }
@@ -111,7 +112,9 @@ export function CinematicMediaPlate({
   useFrame((_, delta) => {
     if (!meshRef.current || !materialRef.current) return;
 
-    const damping = cue.transition.damping;
+    const damping = motion.mediaArrival <= 0
+      ? 0
+      : cue.transition.damping * (0.32 + motion.mediaArrival * 1.08);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     const targetOpacity = enabled ? cue.media.opacity : 0;
     paletteTargets.primary.set(cue.palette.primary);
