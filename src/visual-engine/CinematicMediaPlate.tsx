@@ -355,7 +355,8 @@ export function CinematicMediaPlate({
     meshRef.current.visible = enabled || materialRef.current.uniforms.uOpacity.value > 0.004;
     meshRef.current.position.x = MathUtils.damp(
       meshRef.current.position.x,
-      cue.media.offset[0] + motion.overshoot * 0.08,
+      cue.media.offset[0]
+        + motion.overshoot * (0.08 - cue.spatial.parallax * 0.05),
       damping,
       delta,
     );
@@ -370,7 +371,7 @@ export function CinematicMediaPlate({
     );
     meshRef.current.position.z = MathUtils.damp(
       meshRef.current.position.z,
-      cue.media.depth,
+      cue.media.depth - motion.overshoot * cue.spatial.parallax * 0.1,
       damping,
       delta,
     );

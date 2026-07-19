@@ -42,6 +42,7 @@ import {
   type CinematicCue,
 } from './cinematicScore';
 import { sceneSignatureIndex, sceneSignatureShader } from './sceneSignature';
+import { resolveWorldFocusDistance } from './spatialSignature';
 import {
   decayImpulse,
   sampleCameraShotArc,
@@ -177,6 +178,15 @@ export function LaunchStage({
     : 1;
   const effectsEnabled = state.effectsEnabled;
   const measuredFps = renderTelemetry.fps || performanceProfile.fps;
+  const settledFocusDistance = resolveWorldFocusDistance(
+    {
+      x: cue.camera.position[0],
+      y: cue.camera.position[1],
+      z: cue.camera.position[2],
+    },
+    cue.spatial.focusTarget,
+    cue.lens.focusOffset,
+  );
 
   useEffect(() => {
     setPerformanceProfile({
@@ -208,7 +218,9 @@ export function LaunchStage({
       data-lens-bloom={cue.lens.bloom.toFixed(2)}
       data-lens-bokeh={cue.lens.bokehScale.toFixed(2)}
       data-lens-exposure={cue.lens.exposure.toFixed(2)}
+      data-lens-focus-distance={settledFocusDistance.toFixed(2)}
       data-lens-focus-range={cue.lens.focusRange.toFixed(2)}
+      data-lens-focus-target={cue.spatial.focusTarget.map((value) => value.toFixed(2)).join(',')}
       data-light-ambient={cue.lighting.ambient.toFixed(2)}
       data-light-beam={cue.lighting.beam.toFixed(2)}
       data-light-focus={`${cue.lighting.focus[0].toFixed(2)},${cue.lighting.focus[1].toFixed(2)}`}
@@ -235,6 +247,9 @@ export function LaunchStage({
       data-scene-signature={cue.environment.signature}
       data-scene-signature-motion={!reducedMotion}
       data-scene-signature-transition={reducedMotion ? 'instant' : 'crossfade'}
+      data-spatial-signature={cue.spatial.signature}
+      data-spatial-parallax={cue.spatial.parallax.toFixed(2)}
+      data-spatial-silk-depth={cue.spatial.silkDepth.map((value) => value.toFixed(2)).join(',')}
       data-cue-effective-duration={Math.round(scaleCueDuration(cue.transition.durationMs, cuePace))}
       data-cue-pace={cuePace.toFixed(3)}
       data-world-drift={cue.environment.drift.toFixed(2)}
@@ -669,7 +684,7 @@ function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotion
     vignetteEffect.dispose();
   }, [bloomEffect, gl, vignetteEffect]);
 
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
     const damping = phaseDamping(cue.transition.damping, motion.mediaArrival, motion.handoff);
     bloomEffect.intensity = MathUtils.damp(
       bloomEffect.intensity,
@@ -694,7 +709,11 @@ function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotion
       );
       depthOfFieldRef.current.cocMaterial.focusDistance = MathUtils.damp(
         depthOfFieldRef.current.cocMaterial.focusDistance,
-        cue.lens.focusDistance
+        resolveWorldFocusDistance(
+          camera.position,
+          cue.spatial.focusTarget,
+          cue.lens.focusOffset,
+        )
           - motion.voiceLevel * 0.04
           - motion.voiceEmphasis * 0.018,
         damping,
@@ -2223,12 +2242,29 @@ function SilkField({
       damping,
       delta,
     );
+    meshRef.current.position.x = MathUtils.damp(
+      meshRef.current.position.x,
+      motion.overshoot * cue.spatial.parallax * (foreground ? 0.18 : -0.07)
+        + Math.sin(clock.getElapsedTime() * 0.7) * motion.voiceCadence
+          * cue.spatial.parallax * (foreground ? 0.035 : 0.014),
+      damping,
+      delta,
+    );
+    meshRef.current.position.z = MathUtils.damp(
+      meshRef.current.position.z,
+      cue.spatial.silkDepth[foreground ? 1 : 0]
+        + motion.voiceImpulse * cue.spatial.parallax * (foreground ? 0.08 : -0.03),
+      damping,
+      delta,
+    );
   });
 
   return (
     <mesh
       ref={meshRef}
-      position={foreground ? [0, 0.72, -0.58] : [0, 0.05, -1.95]}
+      position={foreground
+        ? [0, 0.72, cue.spatial.silkDepth[1]]
+        : [0, 0.05, cue.spatial.silkDepth[0]]}
       rotation={foreground ? [0.12, -0.06, -0.08] : [0.02, -0.04, -0.035]}
     >
       <planeGeometry args={foreground ? [8.6, 1.2, 128, 20] : [10.5, 6.2, 112, 68]} />
@@ -2368,7 +2404,10 @@ function OpticalArray({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
       );
       panel.position.z = MathUtils.damp(
         panel.position.z,
-        layout.position[2] + Math.cos(panelTime * 0.17) * 0.12 * energy,
+        layout.position[2] * cue.spatial.glassDepthSpread
+          + cue.spatial.glassDepthOffset
+          + Math.cos(panelTime * 0.17) * 0.12 * energy
+          + direction * motion.overshoot * cue.spatial.parallax * 0.18,
         damping,
         delta,
       );
@@ -2616,7 +2655,9 @@ function EvidenceField({
     const responsiveScale = 1 - portraitMix * 0.2;
     const targetX = MathUtils.lerp(cue.evidence.position[0], 0, portraitMix);
     const targetY = MathUtils.lerp(cue.evidence.position[1], 0.98, portraitMix);
-    const targetZ = cue.evidence.position[2] - portraitMix * 0.15;
+    const targetZ = cue.evidence.position[2]
+      - portraitMix * 0.15
+      + motion.overshoot * cue.spatial.parallax * 0.08;
 
     groupRef.current.position.x = MathUtils.damp(groupRef.current.position.x, targetX, damping, delta);
     groupRef.current.position.y = MathUtils.damp(groupRef.current.position.y, targetY, damping, delta);
@@ -2980,6 +3021,14 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
       damping,
       delta,
     );
+    groupRef.current.position.z = MathUtils.damp(
+      groupRef.current.position.z,
+      cue.spatial.heroDepth
+        + motion.impact * cue.spatial.parallax * 0.06
+        + motion.voiceImpulse * cue.spatial.parallax * 0.04,
+      damping,
+      delta,
+    );
     groupRef.current.rotation.y = MathUtils.damp(
       groupRef.current.rotation.y,
       cue.composition.heroYaw + Math.sin(elapsed * 0.18) * 0.028 * cue.motionEnergy,
@@ -3175,7 +3224,7 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
   return (
     <group
       ref={groupRef}
-      position={[0.08, 0.18, 0.14]}
+      position={[0.08, 0.18, cue.spatial.heroDepth]}
       scale={cue.composition.coreScale}
       visible={cue.composition.coreScale > 0.075}
     >
@@ -3475,6 +3524,14 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
     );
     groupRef.current.scale.setScalar(scale);
     const elapsed = clock.getElapsedTime();
+    groupRef.current.position.z = MathUtils.damp(
+      groupRef.current.position.z,
+      cue.spatial.networkDepth
+        - motion.overshoot * cue.spatial.parallax * 0.1
+        + motion.voiceImpulse * cue.spatial.parallax * 0.035,
+      damping,
+      delta,
+    );
     groupRef.current.rotation.y = Math.sin(elapsed * 0.16) * 0.1 * cue.motionEnergy;
     groupRef.current.rotation.z = Math.sin(elapsed * 0.11) * 0.018 * cue.motionEnergy;
     targetPrimary.set(cue.palette.primary);
@@ -3514,7 +3571,7 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
   });
 
   return (
-    <group ref={groupRef} position={[2.0, -1.12, 0.18]} scale={0.03}>
+    <group ref={groupRef} position={[2.0, -1.12, cue.spatial.networkDepth]} scale={0.03}>
       <mesh>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[geometry.edgePositions, 3]} />

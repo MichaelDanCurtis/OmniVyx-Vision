@@ -8,10 +8,14 @@ import {
 import { stageEvents } from './stageScore';
 import { sceneSignatureIndex, sceneSignatures } from './sceneSignature';
 import { normalizeKineticWord, typographySignatures } from './kineticCopy';
+import {
+  resolveWorldFocusDistance,
+  spatialSignatures,
+} from './spatialSignature';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(13);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(14);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -46,6 +50,13 @@ describe('cinematicScore', () => {
         cue.media.drift,
         cue.media.tintStrength,
         ...Object.values(cue.composition),
+        ...cue.spatial.silkDepth,
+        cue.spatial.glassDepthOffset,
+        cue.spatial.glassDepthSpread,
+        cue.spatial.heroDepth,
+        cue.spatial.networkDepth,
+        cue.spatial.parallax,
+        ...cue.spatial.focusTarget,
         ...cue.evidence.position,
         ...cue.evidence.rotation,
         cue.evidence.spread,
@@ -115,6 +126,20 @@ describe('cinematicScore', () => {
       expect(cue.media.opacity).toBeLessThanOrEqual(1);
       expect(cue.media.scale).toBeGreaterThan(0);
       expect(cue.evidence.spread).toBeGreaterThan(0);
+      expect(cue.spatial.silkDepth[0]).toBeLessThan(cue.spatial.silkDepth[1]);
+      expect(cue.spatial.glassDepthSpread).toBeGreaterThan(0.5);
+      expect(cue.spatial.glassDepthSpread).toBeLessThan(2);
+      expect(cue.spatial.parallax).toBeGreaterThanOrEqual(0);
+      expect(cue.spatial.parallax).toBeLessThanOrEqual(1);
+      expect(resolveWorldFocusDistance(
+        {
+          x: cue.camera.position[0],
+          y: cue.camera.position[1],
+          z: cue.camera.position[2],
+        },
+        cue.spatial.focusTarget,
+        cue.lens.focusOffset,
+      )).toBeGreaterThan(0.1);
       expect(cue.lighting.ambient).toBeGreaterThanOrEqual(0);
       expect(cue.lighting.ambient).toBeLessThanOrEqual(1);
       expect(cue.lighting.beam).toBeGreaterThanOrEqual(0);
@@ -140,7 +165,8 @@ describe('cinematicScore', () => {
       expect(cue.environment.drift).toBeGreaterThanOrEqual(0);
       expect(cue.environment.drift).toBeLessThanOrEqual(1);
       expect(cue.lens.bloom).toBeGreaterThanOrEqual(0);
-      expect(cue.lens.focusDistance).toBeGreaterThan(0);
+      expect(cue.lens.focusOffset).toBeGreaterThanOrEqual(-1);
+      expect(cue.lens.focusOffset).toBeLessThanOrEqual(1);
       expect(cue.lens.focusRange).toBeGreaterThan(0);
       expect(cue.lens.bokehScale).toBeGreaterThanOrEqual(0);
       expect(cue.lens.vignetteDarkness).toBeGreaterThanOrEqual(0);
@@ -255,6 +281,21 @@ describe('cinematicScore', () => {
 
     expect(signatures).toEqual(typographySignatures);
     expect(new Set(signatures).size).toBe(signatures.length);
+  });
+
+  it('authors a distinct near, mid, and far spatial stack for every show beat', () => {
+    const signatures = omniVyxCinematicShow.cueOrder.map(
+      (eventId) => getCinematicCue(eventId).spatial.signature,
+    );
+
+    expect(signatures).toEqual(spatialSignatures);
+    expect(new Set(signatures).size).toBe(signatures.length);
+    expect(getCinematicCue('reveal_product').spatial.heroDepth)
+      .toBeGreaterThan(getCinematicCue('summon_dynamic_chart').spatial.heroDepth);
+    expect(getCinematicCue('explain_value').spatial.parallax)
+      .toBeGreaterThan(getCinematicCue('hold').spatial.parallax);
+    expect(getCinematicCue('resolve').spatial.silkDepth[1]
+      - getCinematicCue('resolve').spatial.silkDepth[0]).toBeGreaterThan(2);
   });
 
   it('gives live direction and hold distinct optical-core compositions', () => {

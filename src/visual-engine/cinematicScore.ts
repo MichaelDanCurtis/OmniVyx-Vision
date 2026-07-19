@@ -3,6 +3,7 @@ import type { MotionPhaseWindow } from './motionEnvelope';
 import type { CuePacingProfile } from './cuePacing';
 import type { SceneSignature } from './sceneSignature';
 import type { TypographySignature } from './kineticCopy';
+import type { SpatialSignature } from './spatialSignature';
 
 export type Vector3Tuple = readonly [number, number, number];
 export type Vector2Tuple = readonly [number, number];
@@ -88,6 +89,16 @@ export interface CinematicCue {
     heroY: number;
     heroYaw: number;
   };
+  spatial: {
+    signature: SpatialSignature;
+    silkDepth: Vector2Tuple;
+    glassDepthOffset: number;
+    glassDepthSpread: number;
+    heroDepth: number;
+    networkDepth: number;
+    parallax: number;
+    focusTarget: Vector3Tuple;
+  };
   evidence: {
     position: Vector3Tuple;
     rotation: Vector3Tuple;
@@ -116,7 +127,7 @@ export interface CinematicCue {
   };
   lens: {
     bloom: number;
-    focusDistance: number;
+    focusOffset: number;
     focusRange: number;
     bokehScale: number;
     vignetteDarkness: number;
@@ -133,7 +144,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 13;
+  schemaVersion: 14;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -151,7 +162,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 13,
+  schemaVersion: 14,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -221,6 +232,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroY: 0.22,
         heroYaw: 0.08,
       },
+      spatial: {
+        signature: 'listening_atrium',
+        silkDepth: [-2, -0.58],
+        glassDepthOffset: 0,
+        glassDepthSpread: 1,
+        heroDepth: 0.14,
+        networkDepth: 0.18,
+        parallax: 0.18,
+        focusTarget: [0.25, 0.22, 0.14],
+      },
       evidence: {
         position: [1.7, -0.18, -0.42],
         rotation: [-0.04, -0.16, 0.01],
@@ -249,7 +270,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       },
       lens: {
         bloom: 0.42,
-        focusDistance: 6.4,
+        focusOffset: -0.2,
         focusRange: 4.2,
         bokehScale: 0.78,
         vignetteDarkness: 0.44,
@@ -329,6 +350,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroY: 0.28,
         heroYaw: -0.2,
       },
+      spatial: {
+        signature: 'product_proscenium',
+        silkDepth: [-2.55, -0.35],
+        glassDepthOffset: -0.15,
+        glassDepthSpread: 1.18,
+        heroDepth: 0.42,
+        networkDepth: -0.35,
+        parallax: 0.52,
+        focusTarget: [1.35, 0.28, 0.42],
+      },
       evidence: {
         position: [1.7, -0.18, -0.42],
         rotation: [-0.04, -0.16, 0.01],
@@ -357,7 +388,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       },
       lens: {
         bloom: 0.62,
-        focusDistance: 5.9,
+        focusOffset: -0.12,
         focusRange: 2.6,
         bokehScale: 1.25,
         vignetteDarkness: 0.48,
@@ -437,6 +468,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroY: 0.24,
         heroYaw: 0.34,
       },
+      spatial: {
+        signature: 'directional_corridor',
+        silkDepth: [-2.65, -0.72],
+        glassDepthOffset: 0.12,
+        glassDepthSpread: 1.32,
+        heroDepth: 0.18,
+        networkDepth: -0.15,
+        parallax: 0.72,
+        focusTarget: [1.42, 0.24, 0.18],
+      },
       evidence: {
         position: [1.7, -0.18, -0.42],
         rotation: [-0.04, -0.16, 0.01],
@@ -465,7 +506,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       },
       lens: {
         bloom: 0.46,
-        focusDistance: 6.2,
+        focusOffset: -0.34,
         focusRange: 4,
         bokehScale: 0.75,
         vignetteDarkness: 0.42,
@@ -545,6 +586,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroY: 0.08,
         heroYaw: -0.12,
       },
+      spatial: {
+        signature: 'canopy_volume',
+        silkDepth: [-2.35, -0.98],
+        glassDepthOffset: -0.28,
+        glassDepthSpread: 1.05,
+        heroDepth: -0.45,
+        networkDepth: 0.52,
+        parallax: 0.45,
+        focusTarget: [1.45, 0.18, 0.52],
+      },
       evidence: {
         position: [1.7, -0.18, -0.42],
         rotation: [-0.04, -0.16, 0.01],
@@ -573,7 +624,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       },
       lens: {
         bloom: 0.44,
-        focusDistance: 5.8,
+        focusOffset: -0.24,
         focusRange: 3.4,
         bokehScale: 0.9,
         vignetteDarkness: 0.4,
@@ -653,6 +704,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroY: 0.12,
         heroYaw: 0.2,
       },
+      spatial: {
+        signature: 'evidence_gallery',
+        silkDepth: [-3.05, -1.35],
+        glassDepthOffset: -0.6,
+        glassDepthSpread: 0.92,
+        heroDepth: -0.65,
+        networkDepth: -0.85,
+        parallax: 0.2,
+        focusTarget: [1.72, 0.24, -0.3],
+      },
       evidence: {
         position: [1.72, -0.24, -0.3],
         rotation: [-0.035, -0.2, 0.015],
@@ -681,7 +742,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       },
       lens: {
         bloom: 0.3,
-        focusDistance: 6,
+        focusOffset: -0.18,
         focusRange: 8,
         bokehScale: 0.15,
         vignetteDarkness: 0.3,
@@ -761,6 +822,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroY: 0.2,
         heroYaw: 0.14,
       },
+      spatial: {
+        signature: 'quiet_shallow',
+        silkDepth: [-2.05, -1.18],
+        glassDepthOffset: -0.2,
+        glassDepthSpread: 0.78,
+        heroDepth: 0.05,
+        networkDepth: -0.7,
+        parallax: 0.08,
+        focusTarget: [0.72, 0.2, 0.05],
+      },
       evidence: {
         position: [1.68, -0.2, -0.4],
         rotation: [-0.04, -0.16, 0.01],
@@ -789,7 +860,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       },
       lens: {
         bloom: 0.28,
-        focusDistance: 6.6,
+        focusOffset: -0.28,
         focusRange: 8,
         bokehScale: 0.3,
         vignetteDarkness: 0.34,
@@ -869,6 +940,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroY: 0.22,
         heroYaw: -0.08,
       },
+      spatial: {
+        signature: 'convergence_stack',
+        silkDepth: [-2.7, -0.42],
+        glassDepthOffset: -0.1,
+        glassDepthSpread: 1.45,
+        heroDepth: 0.46,
+        networkDepth: 0.25,
+        parallax: 0.58,
+        focusTarget: [0.86, 0.28, 0.42],
+      },
       evidence: {
         position: [1.5, -0.18, -0.34],
         rotation: [-0.03, -0.12, 0.01],
@@ -897,7 +978,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       },
       lens: {
         bloom: 0.58,
-        focusDistance: 6.1,
+        focusOffset: -0.12,
         focusRange: 3,
         bokehScale: 1.05,
         vignetteDarkness: 0.5,
