@@ -24,6 +24,12 @@ import {
   type StageQuality,
 } from './stageScore';
 import { omniVyxCinematicShow } from './cinematicScore';
+import {
+  enterPresentationViewport,
+  exitPresentationViewport,
+  PRESENTATION_CHROME_IDLE_MS,
+  type PresentationViewportMode,
+} from './presentationViewport';
 
 export function VisualEngineProof() {
   const [stageState, setStageState] = useState(createInitialStageState);
@@ -33,11 +39,19 @@ export function VisualEngineProof() {
   const [lastNativeReceipt, setLastNativeReceipt] = useState<PresenterReceipt | null>(null);
   const [listening, setListening] = useState(false);
   const [presenting, setPresenting] = useState(false);
+  const [presentationChromeVisible, setPresentationChromeVisible] = useState(false);
+  const [presentationViewport, setPresentationViewport] = useState<
+    PresentationViewportMode | 'inline'
+  >('inline');
   const [presenterPulse, setPresenterPulse] = useState(0);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const audioMeterRef = useRef<PresenterAudioMeter | null>(null);
   const listeningRef = useRef(false);
   const listeningGenerationRef = useRef(0);
+  const presentationChromeTimerRef = useRef<number | null>(null);
+  const presentationGenerationRef = useRef(0);
+  const presentationReturnFocusRef = useRef<HTMLElement | null>(null);
+  const presentationViewportRef = useRef<PresentationViewportMode>('css');
   const presenterKickTimerRef = useRef<number | null>(null);
   const stageStateRef = useRef(stageState);
   const presenterEnergyRef = useRef<PresenterEnergySignal | null>(null);
@@ -54,6 +68,12 @@ export function VisualEngineProof() {
       window.clearTimeout(presenterKickTimerRef.current);
       presenterKickTimerRef.current = null;
     }
+    if (presentationChromeTimerRef.current !== null) {
+      window.clearTimeout(presentationChromeTimerRef.current);
+      presentationChromeTimerRef.current = null;
+    }
+    presentationGenerationRef.current += 1;
+    void exitPresentationViewport(presentationViewportRef.current);
     listeningRef.current = false;
     const recognition = recognitionRef.current;
     recognitionRef.current = null;
@@ -68,10 +88,50 @@ export function VisualEngineProof() {
   }, []);
 
   useEffect(() => {
+    if (!presenting) {
+      setPresentationChromeVisible(false);
+      return undefined;
+    }
+
+    const hideChrome = () => {
+      presentationChromeTimerRef.current = null;
+      setPresentationChromeVisible(false);
+    };
+    const revealChrome = () => {
+      setPresentationChromeVisible(true);
+      if (presentationChromeTimerRef.current !== null) {
+        window.clearTimeout(presentationChromeTimerRef.current);
+      }
+      presentationChromeTimerRef.current = window.setTimeout(
+        hideChrome,
+        PRESENTATION_CHROME_IDLE_MS,
+      );
+    };
+
+    setPresentationChromeVisible(false);
+    window.addEventListener('pointermove', revealChrome, { passive: true });
+    document.addEventListener('focusin', revealChrome);
+    return () => {
+      window.removeEventListener('pointermove', revealChrome);
+      document.removeEventListener('focusin', revealChrome);
+      if (presentationChromeTimerRef.current !== null) {
+        window.clearTimeout(presentationChromeTimerRef.current);
+        presentationChromeTimerRef.current = null;
+      }
+    };
+  }, [presenting]);
+
+  useEffect(() => {
     if (!presenting) return undefined;
     const handlePresentationKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setPresenting(false);
+        stopPresentation();
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        document.querySelector<HTMLButtonElement>('.stage-presentation-toggle')?.focus();
         return;
       }
 
@@ -89,6 +149,18 @@ export function VisualEngineProof() {
     window.addEventListener('keydown', handlePresentationKey);
     return () => window.removeEventListener('keydown', handlePresentationKey);
   }, [presenting]);
+
+  useEffect(() => {
+    if (!presenting || presentationViewport !== 'browser') return undefined;
+    const handleFullscreenChange = () => {
+      if ('fullscreenElement' in document && !document.fullscreenElement) {
+        presentationViewportRef.current = 'css';
+        setPresentationViewport('css');
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [presentationViewport, presenting]);
 
   function handleEvent(eventId: StageEventId) {
     pulsePresenter();
@@ -206,15 +278,60 @@ export function VisualEngineProof() {
     }, 220);
   }
 
+  function startPresentation() {
+    const generation = presentationGenerationRef.current + 1;
+    presentationGenerationRef.current = generation;
+    presentationReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    presentationViewportRef.current = 'css';
+    setPresentationViewport('css');
+    setPresentationChromeVisible(false);
+    setPresenting(true);
+    void enterPresentationViewport().then((mode) => {
+      if (presentationGenerationRef.current !== generation) {
+        void exitPresentationViewport(mode);
+        return;
+      }
+      presentationViewportRef.current = mode;
+      setPresentationViewport(mode);
+    });
+  }
+
+  function stopPresentation() {
+    presentationGenerationRef.current += 1;
+    const mode = presentationViewportRef.current;
+    presentationViewportRef.current = 'css';
+    setPresentationChromeVisible(false);
+    setPresentationViewport('inline');
+    setPresenting(false);
+    void exitPresentationViewport(mode);
+    const returnFocus = presentationReturnFocusRef.current;
+    presentationReturnFocusRef.current = null;
+    window.setTimeout(() => returnFocus?.focus(), 0);
+  }
+
+  function togglePresentation() {
+    if (presenting) stopPresentation();
+    else startPresentation();
+  }
+
   return (
-    <section className={presenting ? 'visual-engine-proof presenting' : 'visual-engine-proof'}>
+    <section
+      className={presenting ? 'visual-engine-proof presenting' : 'visual-engine-proof'}
+      aria-label={presenting ? 'Audience presentation' : undefined}
+      aria-modal={presenting || undefined}
+      data-presentation-chrome={presentationChromeVisible ? 'visible' : 'hidden'}
+      data-presentation-viewport={presentationViewport}
+      role={presenting ? 'dialog' : undefined}
+    >
       <div className="visual-engine-layout">
         <LaunchStage
           presenterEnergy={presenterEnergy}
           presenterPulse={presenterPulse}
           presenting={presenting}
           state={stageState}
-          onTogglePresenting={() => setPresenting((current) => !current)}
+          onTogglePresenting={togglePresentation}
         />
         <StageControls
           canUseMic={canUseMic}

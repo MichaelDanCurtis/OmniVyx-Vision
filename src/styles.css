@@ -1111,7 +1111,9 @@ textarea::placeholder {
   transition:
     border-color 160ms ease,
     color 160ms ease,
-    background 160ms ease;
+    background 160ms ease,
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
 .stage-presentation-toggle:hover {
@@ -1152,7 +1154,20 @@ textarea::placeholder {
 }
 
 .visual-engine-proof.presenting .stage-presentation-toggle {
-  opacity: 0.16;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+}
+
+.visual-engine-proof.presenting[data-presentation-chrome="hidden"] {
+  cursor: none;
+}
+
+.visual-engine-proof.presenting[data-presentation-chrome="visible"]
+  .stage-presentation-toggle {
+  opacity: 0.72;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .visual-engine-proof.presenting .stage-presentation-toggle:hover,

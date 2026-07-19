@@ -93,6 +93,8 @@ High quality is adaptive rather than a fixed pixel ratio. The stage measures sus
 
 The operator preview uses a stable aspect ratio. Presentation view expands the same stage to the full native window, hides operator controls and telemetry, advances authored cues with left and right arrow keys, and exits with Escape. Speech and native semantic signals continue to use the same event path in both views.
 
+The audience viewport enters Tauri window fullscreen when the native shell is available, requests browser fullscreen on the web, and retains the fixed CSS surface as a failure-safe fallback. A generation token prevents a delayed fullscreen result from reopening a presentation that already exited; loss of browser fullscreen degrades to the CSS surface instead of tearing down the show. Presentation mode is an accessible modal surface. Tab is trapped on the exit control, Escape restores focus to the authoring entry point, and pointer movement reveals the otherwise inert exit control for 1.4 seconds. Idle presentation hides the cursor and all stage chrome while leaving keyboard cueing, speech recognition, presenter-energy capture, and semantic events active. Runtime attributes expose the negotiated viewport and chrome state for native and projector audits.
+
 ## Build Order
 
 1. Expand the versioned cinematic show document into persisted authoring and rehearsal documents.

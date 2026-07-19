@@ -354,7 +354,10 @@ export function LaunchStage({
           type="button"
           title={presenting ? 'Exit presentation view' : 'Enter presentation view'}
           aria-label={presenting ? 'Exit presentation view' : 'Enter presentation view'}
-          onClick={onTogglePresenting}
+          onClick={(event) => {
+            onTogglePresenting();
+            event.currentTarget.blur();
+          }}
         >
           {presenting ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
         </button>
