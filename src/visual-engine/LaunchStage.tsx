@@ -19,11 +19,14 @@ import {
   Color,
   DirectionalLight,
   DoubleSide,
+  DynamicDrawUsage,
   Group,
+  InstancedMesh,
   MathUtils,
   Mesh,
   MeshBasicMaterial,
   MeshPhysicalMaterial,
+  Object3D,
   PerspectiveCamera,
   PointLight,
   PointsMaterial,
@@ -72,6 +75,16 @@ interface RenderTelemetry {
   pixelRatio: number;
   triangles: number;
 }
+
+const OPTICAL_PANEL_LAYOUT = [
+  { position: [-2.9, 0.5, -1.2], rotation: [0.08, 0.42, -0.08], scale: [1.9, 1.2], phase: 0, opacity: 0.92 },
+  { position: [2.7, 0.85, -1.7], rotation: [0.02, -0.42, 0.08], scale: [1.9, 1.2], phase: 1.73, opacity: 0.88 },
+  { position: [0.45, -1.15, -0.65], rotation: [-0.12, -0.14, 0.02], scale: [1.9, 1.2], phase: 3.46, opacity: 0.78 },
+  { position: [-1.35, 1.72, -2.45], rotation: [0.16, 0.22, -0.16], scale: [1.34, 0.82], phase: 5.19, opacity: 0.52 },
+  { position: [3.55, -0.58, -2.82], rotation: [-0.08, -0.58, 0.14], scale: [1.52, 0.92], phase: 6.92, opacity: 0.46 },
+  { position: [-3.72, -1.02, -3.18], rotation: [0.04, 0.64, -0.12], scale: [1.46, 0.88], phase: 8.65, opacity: 0.42 },
+  { position: [1.28, 1.92, -3.35], rotation: [0.18, -0.18, 0.1], scale: [1.18, 0.72], phase: 10.38, opacity: 0.36 },
+] as const;
 
 interface LaunchStageProps {
   presenterEnergy?: PresenterEnergySignal;
@@ -140,6 +153,7 @@ export function LaunchStage({
       data-lens-focus-range={cue.lens.focusRange.toFixed(2)}
       data-shot-dolly={cue.camera.shot.positionArc[2].toFixed(2)}
       data-shot-roll={cue.camera.shot.roll.toFixed(3)}
+      data-glass-instances={OPTICAL_PANEL_LAYOUT.length}
       data-cue-effective-duration={Math.round(scaleCueDuration(cue.transition.durationMs, cuePace))}
       data-cue-pace={cuePace.toFixed(3)}
       data-world-drift={cue.environment.drift.toFixed(2)}
@@ -449,9 +463,7 @@ function LaunchScene({
       />
       <SilkField cue={cue} motion={motion} />
       <SilkField cue={cue} foreground motion={motion} />
-      <OpticalPanel cue={cue} index={0} motion={motion} position={[-2.9, 0.5, -1.2]} rotation={[0.08, 0.42, -0.08]} />
-      <OpticalPanel cue={cue} index={1} motion={motion} position={[2.7, 0.85, -1.7]} rotation={[0.02, -0.42, 0.08]} />
-      <OpticalPanel cue={cue} index={2} motion={motion} position={[0.45, -1.15, -0.65]} rotation={[-0.12, -0.14, 0.02]} />
+      <OpticalArray cue={cue} motion={motion} />
       <HeroMonolith cue={cue} motion={motion} />
       <NetworkBloom cue={cue} motion={motion} />
 
@@ -1393,27 +1405,34 @@ function SilkField({
   );
 }
 
-const opticalPanelVertexShader = /* glsl */ `
+const opticalArrayVertexShader = /* glsl */ `
+  attribute float aOpacity;
+  attribute float aPhase;
   uniform float uTime;
-  uniform float uPhase;
+  varying float vOpacity;
+  varying float vPhase;
   varying vec2 vUv;
 
   void main() {
+    vOpacity = aOpacity;
+    vPhase = aPhase;
     vUv = uv;
     vec3 displaced = position;
-    displaced.z += sin(position.y * 2.4 + uTime * 0.22 + uPhase) * 0.035;
-    displaced.z += cos(position.x * 1.8 - uTime * 0.16 + uPhase) * 0.018;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+    displaced.z += sin(position.y * 2.4 + uTime * 0.22 + aPhase) * 0.035;
+    displaced.z += cos(position.x * 1.8 - uTime * 0.16 + aPhase) * 0.018;
+    vec4 instancePosition = instanceMatrix * vec4(displaced, 1.0);
+    gl_Position = projectionMatrix * modelViewMatrix * instancePosition;
   }
 `;
 
-const opticalPanelFragmentShader = /* glsl */ `
+const opticalArrayFragmentShader = /* glsl */ `
   uniform float uTime;
-  uniform float uPhase;
   uniform float uOpacity;
   uniform vec3 uPrimary;
   uniform vec3 uSecondary;
   uniform vec3 uAccent;
+  varying float vOpacity;
+  varying float vPhase;
   varying vec2 vUv;
 
   void main() {
@@ -1421,28 +1440,39 @@ const opticalPanelFragmentShader = /* glsl */ `
     float distanceToEdge = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.18;
     float mask = 1.0 - smoothstep(-0.005, 0.018, distanceToEdge);
     float border = 1.0 - smoothstep(0.012, 0.055, abs(distanceToEdge));
-    float sweepInput = sin((vUv.x * 1.35 + vUv.y * 0.72 + uTime * 0.045 + uPhase) * 6.28318);
+    float sweepInput = sin((vUv.x * 1.35 + vUv.y * 0.72 + uTime * 0.045 + vPhase) * 6.28318);
     float sweep = pow(smoothstep(0.62, 1.0, sweepInput * 0.5 + 0.5), 2.0);
     float cornerGlow = smoothstep(0.48, 0.96, length(vUv - vec2(0.5)) * 1.42);
     vec3 glassColor = mix(uPrimary, uSecondary, vUv.y * 0.56 + sweep * 0.18);
     glassColor = mix(glassColor, uAccent, cornerGlow * 0.18);
-    float alpha = mask * (0.018 + border * 0.25 + sweep * 0.075 + cornerGlow * 0.025) * uOpacity;
+    float alpha = mask * (0.018 + border * 0.25 + sweep * 0.075 + cornerGlow * 0.025) * uOpacity * vOpacity;
     if (alpha < 0.002) discard;
     gl_FragColor = vec4(glassColor, alpha);
   }
 `;
 
-interface OpticalPanelProps {
-  cue: CinematicCue;
-  index: number;
-  motion: StageMotionBus;
-  position: [number, number, number];
-  rotation: [number, number, number];
-}
-
-function OpticalPanel({ cue, index, motion, position, rotation }: OpticalPanelProps) {
-  const paneRef = useRef<Mesh>(null);
+function OpticalArray({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
+  const arrayRef = useRef<InstancedMesh>(null);
   const materialRef = useRef<ShaderMaterial>(null);
+  const panels = useMemo(
+    () => OPTICAL_PANEL_LAYOUT.map((layout) => {
+      const panel = new Object3D();
+      panel.position.set(layout.position[0], layout.position[1], layout.position[2]);
+      panel.rotation.set(layout.rotation[0], layout.rotation[1], layout.rotation[2]);
+      panel.scale.set(layout.scale[0], layout.scale[1], 1);
+      panel.updateMatrix();
+      return panel;
+    }),
+    [],
+  );
+  const phases = useMemo(
+    () => new Float32Array(OPTICAL_PANEL_LAYOUT.map((layout) => layout.phase)),
+    [],
+  );
+  const opacities = useMemo(
+    () => new Float32Array(OPTICAL_PANEL_LAYOUT.map((layout) => layout.opacity)),
+    [],
+  );
   const paletteTargets = useMemo(
     () => ({
       primary: new Color(cue.palette.primary),
@@ -1454,7 +1484,6 @@ function OpticalPanel({ cue, index, motion, position, rotation }: OpticalPanelPr
   const uniforms = useMemo(
     () => ({
       uTime: { value: 0 },
-      uPhase: { value: index * 1.73 },
       uOpacity: { value: 0.6 },
       uPrimary: { value: new Color(cue.palette.primary) },
       uSecondary: { value: new Color(cue.palette.secondary) },
@@ -1463,40 +1492,72 @@ function OpticalPanel({ cue, index, motion, position, rotation }: OpticalPanelPr
     [],
   );
 
+  useLayoutEffect(() => {
+    if (!arrayRef.current) return;
+    arrayRef.current.instanceMatrix.setUsage(DynamicDrawUsage);
+    panels.forEach((panel, index) => arrayRef.current?.setMatrixAt(index, panel.matrix));
+    arrayRef.current.instanceMatrix.needsUpdate = true;
+  }, [panels]);
+
   useFrame(({ clock }, delta) => {
-    if (!paneRef.current || !materialRef.current) return;
-    const elapsed = clock.getElapsedTime() + index * 1.7;
+    if (!arrayRef.current || !materialRef.current) return;
+    const elapsed = clock.getElapsedTime();
     const damping = phaseDamping(cue.transition.damping, motion.actorArrival, motion.handoff);
     const energy = cue.motionEnergy;
     const paletteAlpha = 1 - Math.exp(-damping * delta);
-    paneRef.current.position.x = MathUtils.damp(
-      paneRef.current.position.x,
-      position[0] * cue.composition.glassSpread + (index - 1) * motion.impact * 0.22,
-      damping,
-      delta,
-    );
-    paneRef.current.position.y = MathUtils.damp(
-      paneRef.current.position.y,
-      position[1]
-        + Math.sin(elapsed * 0.48) * 0.14 * energy
-        + motion.overshoot * (index === 1 ? 0.1 : -0.07),
-      damping,
-      delta,
-    );
-    paneRef.current.rotation.y = MathUtils.damp(
-      paneRef.current.rotation.y,
-      rotation[1]
-        + Math.sin(elapsed * 0.32) * 0.07 * energy
-        + (index - 1) * motion.impact * 0.1,
-      damping,
-      delta,
-    );
-    paneRef.current.rotation.z = MathUtils.damp(
-      paneRef.current.rotation.z,
-      rotation[2] + Math.sin(elapsed * 0.2) * 0.025 * energy,
-      damping,
-      delta,
-    );
+    const chartYield = cue.composition.chartScale > 0.5 ? 0.82 : 1;
+    panels.forEach((panel, index) => {
+      const layout = OPTICAL_PANEL_LAYOUT[index];
+      const panelTime = elapsed + layout.phase;
+      const direction = (index - (OPTICAL_PANEL_LAYOUT.length - 1) * 0.5) / 3;
+      panel.position.x = MathUtils.damp(
+        panel.position.x,
+        layout.position[0] * cue.composition.glassSpread
+          + Math.sin(panelTime * 0.19) * 0.08 * energy
+          + direction * motion.impact * 0.24,
+        damping,
+        delta,
+      );
+      panel.position.y = MathUtils.damp(
+        panel.position.y,
+        layout.position[1]
+          + Math.sin(panelTime * 0.41) * 0.14 * energy
+          + motion.overshoot * direction * 0.09,
+        damping,
+        delta,
+      );
+      panel.position.z = MathUtils.damp(
+        panel.position.z,
+        layout.position[2] + Math.cos(panelTime * 0.17) * 0.12 * energy,
+        damping,
+        delta,
+      );
+      panel.rotation.x = MathUtils.damp(
+        panel.rotation.x,
+        layout.rotation[0] + Math.cos(panelTime * 0.23) * 0.025 * energy,
+        damping,
+        delta,
+      );
+      panel.rotation.y = MathUtils.damp(
+        panel.rotation.y,
+        layout.rotation[1]
+          + Math.sin(panelTime * 0.29) * 0.07 * energy
+          + direction * motion.impact * 0.08,
+        damping,
+        delta,
+      );
+      panel.rotation.z = MathUtils.damp(
+        panel.rotation.z,
+        layout.rotation[2] + Math.sin(panelTime * 0.16) * 0.025 * energy,
+        damping,
+        delta,
+      );
+      panel.scale.x = MathUtils.damp(panel.scale.x, layout.scale[0] * chartYield, damping, delta);
+      panel.scale.y = MathUtils.damp(panel.scale.y, layout.scale[1] * chartYield, damping, delta);
+      panel.updateMatrix();
+      arrayRef.current?.setMatrixAt(index, panel.matrix);
+    });
+    arrayRef.current.instanceMatrix.needsUpdate = true;
     paletteTargets.primary.set(cue.palette.primary);
     paletteTargets.secondary.set(cue.palette.secondary);
     paletteTargets.accent.set(cue.palette.accent);
@@ -1518,19 +1579,26 @@ function OpticalPanel({ cue, index, motion, position, rotation }: OpticalPanelPr
   });
 
   return (
-    <mesh ref={paneRef} position={position} rotation={rotation}>
-      <planeGeometry args={[1.9, 1.2, 16, 10]} />
+    <instancedMesh
+      ref={arrayRef}
+      args={[undefined, undefined, OPTICAL_PANEL_LAYOUT.length]}
+      frustumCulled={false}
+    >
+      <planeGeometry args={[1, 1, 16, 10]}>
+        <instancedBufferAttribute attach="attributes-aPhase" args={[phases, 1]} />
+        <instancedBufferAttribute attach="attributes-aOpacity" args={[opacities, 1]} />
+      </planeGeometry>
       <shaderMaterial
         ref={materialRef}
         blending={AdditiveBlending}
         depthWrite={false}
-        fragmentShader={opticalPanelFragmentShader}
+        fragmentShader={opticalArrayFragmentShader}
         side={DoubleSide}
         transparent
         uniforms={uniforms}
-        vertexShader={opticalPanelVertexShader}
+        vertexShader={opticalArrayVertexShader}
       />
-    </mesh>
+    </instancedMesh>
   );
 }
 
