@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildKineticHeadline,
+  normalizeKineticWord,
   resolveKineticSpeechStyle,
   writeKineticSpeechStyle,
 } from './kineticCopy';
@@ -26,6 +27,17 @@ describe('buildKineticHeadline', () => {
 
     expect(line.words.map((word) => word.text)).toEqual(['Intent', 'becomes', 'motion.']);
     expect(line.words.map((word) => word.index)).toEqual([0, 1, 2]);
+  });
+
+  it('marks authored emphasis words after normalizing case and punctuation', () => {
+    const lines = buildKineticHeadline(
+      ['The numbers', 'arrive on cue.'],
+      ['NUMBERS', 'cue'],
+    );
+
+    expect(lines.flatMap((line) => line.words).filter((word) => word.emphasized)
+      .map((word) => word.text)).toEqual(['numbers', 'cue.']);
+    expect(normalizeKineticWord('Performed.')).toBe('performed');
   });
 });
 

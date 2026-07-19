@@ -7,10 +7,11 @@ import {
 } from './cinematicScore';
 import { stageEvents } from './stageScore';
 import { sceneSignatureIndex, sceneSignatures } from './sceneSignature';
+import { normalizeKineticWord, typographySignatures } from './kineticCopy';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(12);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(13);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -80,6 +81,13 @@ describe('cinematicScore', () => {
       expect(cue.copy.headline.length).toBeGreaterThan(0);
       expect(cue.copy.headlineLines.join(' ')).toBe(cue.copy.headline);
       expect(cue.copy.headlineLines.length).toBeGreaterThanOrEqual(2);
+      const headlineWords = new Set(
+        cue.copy.headline.split(/\s+/).map(normalizeKineticWord),
+      );
+      expect(cue.copy.emphasisWords.length).toBeGreaterThan(0);
+      expect(cue.copy.emphasisWords.every(
+        (word) => headlineWords.has(normalizeKineticWord(word)),
+      )).toBe(true);
       expect(cue.transition.copyDelayMs).toBeGreaterThanOrEqual(0);
       expect(cue.transition.sweepIntensity).toBeGreaterThanOrEqual(0);
       expect(cue.transition.sweepIntensity).toBeLessThanOrEqual(1.2);
@@ -238,6 +246,15 @@ describe('cinematicScore', () => {
     expect(signatures).toEqual(sceneSignatures);
     expect(new Set(signatures).size).toBe(signatures.length);
     expect(indices).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it('authors a distinct typography composition for every show beat', () => {
+    const signatures = omniVyxCinematicShow.cueOrder.map(
+      (eventId) => getCinematicCue(eventId).copy.signature,
+    );
+
+    expect(signatures).toEqual(typographySignatures);
+    expect(new Set(signatures).size).toBe(signatures.length);
   });
 
   it('gives live direction and hold distinct optical-core compositions', () => {

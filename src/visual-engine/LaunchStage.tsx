@@ -216,6 +216,7 @@ export function LaunchStage({
       data-shot-dolly={cue.camera.shot.positionArc[2].toFixed(2)}
       data-shot-roll={cue.camera.shot.roll.toFixed(3)}
       data-transition-signature={cue.transition.signature}
+      data-typography-signature={cue.copy.signature}
       data-glass-instances={OPTICAL_PANEL_LAYOUT.length}
       data-silk-draws="2"
       data-silk-profile="anisotropic-weave-v2"
@@ -445,8 +446,8 @@ function StageCopyLayer({
   );
   const wordStaggerMs = clamp(lineStaggerMs * (interrupted ? 0.42 : 0.56), 16, 38);
   const kineticLines = useMemo(
-    () => buildKineticHeadline(cue.copy.headlineLines),
-    [cue.copy.headlineLines],
+    () => buildKineticHeadline(cue.copy.headlineLines, cue.copy.emphasisWords),
+    [cue.copy.emphasisWords, cue.copy.headlineLines],
   );
   const style = {
     '--cue-copy-duration': `${copyDurationMs}ms`,
@@ -470,12 +471,18 @@ function StageCopyLayer({
           : 'visual-engine-copy stage-copy-current'}
       data-copy-event={eventId}
       data-copy-interrupted={interrupted || undefined}
+      data-copy-signature={cue.copy.signature}
       style={style}
     >
       <p className="eyebrow">{cue.copy.eyebrow}</p>
       <h2 aria-label={outgoing ? undefined : cue.copy.headline}>
         {kineticLines.map((line) => (
-          <span className="stage-copy-line" key={line.text} aria-hidden="true">
+          <span
+            aria-hidden="true"
+            className="stage-copy-line"
+            data-line-index={line.index}
+            key={line.text}
+          >
             <span
               className="stage-copy-line-inner"
               style={{ '--line-index': line.index } as CSSProperties}
@@ -491,7 +498,13 @@ function StageCopyLayer({
                     '--word-glint-offset': `${((word.globalIndex % 4) - 1.5) * 9}%`,
                   } as CSSProperties}
                 >
-                  <span className="stage-copy-word" data-word={word.text}>{word.text}</span>
+                  <span
+                    className="stage-copy-word"
+                    data-emphasis={word.emphasized || undefined}
+                    data-word={word.text}
+                  >
+                    {word.text}
+                  </span>
                 </span>
               ))}
             </span>

@@ -1,4 +1,5 @@
 export interface KineticHeadlineWord {
+  emphasized: boolean;
   globalIndex: number;
   index: number;
   text: string;
@@ -18,20 +19,39 @@ export interface KineticSpeechStyle {
   scale: string;
 }
 
+export const typographySignatures = [
+  'listening_monument',
+  'product_lockup',
+  'vector_split',
+  'organic_rise',
+  'evidence_precision',
+  'quiet_statement',
+  'finale_convergence',
+] as const;
+
+export type TypographySignature = (typeof typographySignatures)[number];
+
 export function buildKineticHeadline(
   headlineLines: readonly string[],
+  emphasisWords: readonly string[] = [],
 ): readonly KineticHeadlineLine[] {
   let globalIndex = 0;
+  const emphasis = new Set(emphasisWords.map(normalizeKineticWord).filter(Boolean));
 
   return headlineLines.map((text, lineIndex) => ({
     index: lineIndex,
     text,
     words: text.trim().split(/\s+/).map((word, wordIndex) => ({
+      emphasized: emphasis.has(normalizeKineticWord(word)),
       globalIndex: globalIndex++,
       index: wordIndex,
       text: word,
     })),
   }));
+}
+
+export function normalizeKineticWord(word: string): string {
+  return word.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 export function resolveKineticSpeechStyle(level: number, peak: number): KineticSpeechStyle {

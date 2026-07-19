@@ -2,6 +2,7 @@ import type { StageEventId } from './stageScore';
 import type { MotionPhaseWindow } from './motionEnvelope';
 import type { CuePacingProfile } from './cuePacing';
 import type { SceneSignature } from './sceneSignature';
+import type { TypographySignature } from './kineticCopy';
 
 export type Vector3Tuple = readonly [number, number, number];
 export type Vector2Tuple = readonly [number, number];
@@ -31,8 +32,10 @@ export function transitionSignatureIndex(signature: TransitionSignature): number
 export interface CinematicCue {
   copy: {
     eyebrow: string;
+    emphasisWords: readonly string[];
     headline: string;
     headlineLines: readonly string[];
+    signature: TypographySignature;
     body: string;
   };
   camera: {
@@ -130,7 +133,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 12;
+  schemaVersion: 13;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -148,7 +151,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 12,
+  schemaVersion: 13,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -156,8 +159,10 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
     open_brand: {
       copy: {
         eyebrow: 'OmniVyx Vision',
+        emphasisWords: ['listening'],
         headline: 'The stage is listening.',
         headlineLines: ['The stage is', 'listening.'],
+        signature: 'listening_monument',
         body: 'A cinematic presentation system directed by the meaning and rhythm of your voice.',
       },
       camera: {
@@ -262,8 +267,10 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
     reveal_product: {
       copy: {
         eyebrow: 'Introducing OmniVyx',
+        emphasisWords: ['performed'],
         headline: 'Presentations, performed.',
         headlineLines: ['Presentations,', 'performed.'],
+        signature: 'product_lockup',
         body: 'Not a sequence of slides. A responsive visual world that moves with the room.',
       },
       camera: {
@@ -368,8 +375,10 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
     explain_value: {
       copy: {
         eyebrow: 'Live direction',
+        emphasisWords: ['Intent', 'motion'],
         headline: 'Intent becomes motion.',
         headlineLines: ['Intent becomes', 'motion.'],
+        signature: 'vector_split',
         body: 'Your words shape composition, pacing, emphasis, and the next visual beat in real time.',
       },
       camera: {
@@ -474,8 +483,10 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
     grow_system: {
       copy: {
         eyebrow: 'Generative narrative',
+        emphasisWords: ['grow'],
         headline: 'Every idea can grow.',
         headlineLines: ['Every idea', 'can grow.'],
+        signature: 'organic_rise',
         body: 'Stories, evidence, live data, and generated worlds remain part of one continuous composition.',
       },
       camera: {
@@ -580,8 +591,10 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
     summon_dynamic_chart: {
       copy: {
         eyebrow: 'Dynamic evidence',
+        emphasisWords: ['numbers', 'cue'],
         headline: 'The numbers arrive on cue.',
         headlineLines: ['The numbers', 'arrive on cue.'],
+        signature: 'evidence_precision',
         body: 'Prepared data enters the stage when the conversation needs it, then yields to the story.',
       },
       camera: {
@@ -686,8 +699,10 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
     hold: {
       copy: {
         eyebrow: 'Hold the room',
+        emphasisWords: ['moment'],
         headline: 'Stay with the moment.',
         headlineLines: ['Stay with', 'the moment.'],
+        signature: 'quiet_statement',
         body: 'The stage keeps breathing without competing with the presenter or forcing the next beat.',
       },
       camera: {
@@ -792,8 +807,10 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
     resolve: {
       copy: {
         eyebrow: 'One continuous performance',
+        emphasisWords: ['feel'],
         headline: 'Make the room feel it.',
         headlineLines: ['Make the room', 'feel it.'],
+        signature: 'finale_convergence',
         body: 'Authored with AI. Rehearsed with a human. Performed together, live.',
       },
       camera: {
