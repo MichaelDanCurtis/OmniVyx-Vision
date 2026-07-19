@@ -8,7 +8,7 @@ import { stageEvents } from './stageScore';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(9);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(10);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -46,7 +46,14 @@ describe('cinematicScore', () => {
         ...cue.evidence.position,
         ...cue.evidence.rotation,
         cue.evidence.spread,
-        ...Object.values(cue.lighting),
+        cue.lighting.ambient,
+        cue.lighting.beam,
+        ...cue.lighting.focus,
+        cue.lighting.focusSize,
+        cue.lighting.key,
+        cue.lighting.negativeSpace,
+        cue.lighting.rim,
+        cue.lighting.accent,
         cue.environment.glow,
         ...cue.environment.glowPosition,
         cue.environment.horizon,
@@ -98,6 +105,15 @@ describe('cinematicScore', () => {
       expect(cue.media.opacity).toBeLessThanOrEqual(1);
       expect(cue.media.scale).toBeGreaterThan(0);
       expect(cue.evidence.spread).toBeGreaterThan(0);
+      expect(cue.lighting.ambient).toBeGreaterThanOrEqual(0);
+      expect(cue.lighting.ambient).toBeLessThanOrEqual(1);
+      expect(cue.lighting.beam).toBeGreaterThanOrEqual(0);
+      expect(cue.lighting.beam).toBeLessThanOrEqual(1);
+      expect(cue.lighting.focus.every((value) => value >= 0 && value <= 1)).toBe(true);
+      expect(cue.lighting.focusSize).toBeGreaterThan(0);
+      expect(cue.lighting.focusSize).toBeLessThanOrEqual(1);
+      expect(cue.lighting.negativeSpace).toBeGreaterThanOrEqual(0);
+      expect(cue.lighting.negativeSpace).toBeLessThanOrEqual(1);
       expect(cue.environment.glow).toBeGreaterThanOrEqual(0);
       expect(cue.environment.glow).toBeLessThanOrEqual(1);
       expect(cue.environment.glowPosition.every((value) => value >= -1 && value <= 1)).toBe(true);
@@ -187,6 +203,17 @@ describe('cinematicScore', () => {
     expect(chart.grid).toBeGreaterThan(growth.grid);
     expect(hold.glow).toBeLessThan(reveal.glow);
     expect(hold.drift).toBeLessThan(reveal.drift);
+  });
+
+  it('scores focal lighting and protected negative space for every cue', () => {
+    const reveal = getCinematicCue('reveal_product').lighting;
+    const chart = getCinematicCue('summon_dynamic_chart').lighting;
+    const hold = getCinematicCue('hold').lighting;
+
+    expect(reveal.beam).toBeGreaterThan(hold.beam);
+    expect(chart.negativeSpace).toBeGreaterThan(reveal.negativeSpace);
+    expect(chart.focusSize).toBeLessThan(hold.focusSize);
+    expect(hold.ambient).toBeLessThan(reveal.ambient);
   });
 
   it('gives live direction and hold distinct optical-core compositions', () => {

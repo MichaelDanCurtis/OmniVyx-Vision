@@ -67,7 +67,12 @@ export interface CinematicCue {
     spread: number;
   };
   lighting: {
+    ambient: number;
+    beam: number;
+    focus: Vector2Tuple;
+    focusSize: number;
     key: number;
+    negativeSpace: number;
     rim: number;
     accent: number;
   };
@@ -100,7 +105,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 9;
+  schemaVersion: 10;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -118,7 +123,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 9,
+  schemaVersion: 10,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -190,7 +195,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         rotation: [-0.04, -0.16, 0.01],
         spread: 0.96,
       },
-      lighting: { key: 1.85, rim: 3.8, accent: 2.6 },
+      lighting: {
+        ambient: 0.2,
+        beam: 0.28,
+        focus: [0.67, 0.57],
+        focusSize: 0.62,
+        key: 1.85,
+        negativeSpace: 0.56,
+        rim: 3.8,
+        accent: 2.6,
+      },
       environment: {
         glow: 0.32,
         glowPosition: [0.24, 0.16],
@@ -285,7 +299,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         rotation: [-0.04, -0.16, 0.01],
         spread: 0.96,
       },
-      lighting: { key: 2.7, rim: 5.2, accent: 3.4 },
+      lighting: {
+        ambient: 0.17,
+        beam: 0.64,
+        focus: [0.67, 0.55],
+        focusSize: 0.5,
+        key: 2.7,
+        negativeSpace: 0.64,
+        rim: 5.2,
+        accent: 3.4,
+      },
       environment: {
         glow: 0.62,
         glowPosition: [0.3, 0.12],
@@ -380,7 +403,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         rotation: [-0.04, -0.16, 0.01],
         spread: 0.96,
       },
-      lighting: { key: 2.25, rim: 4.4, accent: 4.2 },
+      lighting: {
+        ambient: 0.19,
+        beam: 0.46,
+        focus: [0.69, 0.54],
+        focusSize: 0.58,
+        key: 2.25,
+        negativeSpace: 0.6,
+        rim: 4.4,
+        accent: 4.2,
+      },
       environment: {
         glow: 0.48,
         glowPosition: [-0.08, 0.12],
@@ -475,7 +507,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         rotation: [-0.04, -0.16, 0.01],
         spread: 0.96,
       },
-      lighting: { key: 2.05, rim: 3.6, accent: 3.1 },
+      lighting: {
+        ambient: 0.15,
+        beam: 0.52,
+        focus: [0.68, 0.59],
+        focusSize: 0.66,
+        key: 2.05,
+        negativeSpace: 0.54,
+        rim: 3.6,
+        accent: 3.1,
+      },
       environment: {
         glow: 0.58,
         glowPosition: [0.36, 0.14],
@@ -570,7 +611,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         rotation: [-0.035, -0.2, 0.015],
         spread: 1.08,
       },
-      lighting: { key: 2.4, rim: 4.8, accent: 4.6 },
+      lighting: {
+        ambient: 0.18,
+        beam: 0.22,
+        focus: [0.7, 0.62],
+        focusSize: 0.46,
+        key: 2.4,
+        negativeSpace: 0.7,
+        rim: 4.8,
+        accent: 4.6,
+      },
       environment: {
         glow: 0.3,
         glowPosition: [0.5, 0.3],
@@ -665,7 +715,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         rotation: [-0.04, -0.16, 0.01],
         spread: 0.98,
       },
-      lighting: { key: 1.8, rim: 3.1, accent: 2.3 },
+      lighting: {
+        ambient: 0.13,
+        beam: 0.16,
+        focus: [0.63, 0.56],
+        focusSize: 0.72,
+        key: 1.8,
+        negativeSpace: 0.66,
+        rim: 3.1,
+        accent: 2.3,
+      },
       environment: {
         glow: 0.18,
         glowPosition: [0.08, 0.12],
@@ -760,7 +819,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         rotation: [-0.03, -0.12, 0.01],
         spread: 1.02,
       },
-      lighting: { key: 2.8, rim: 5.3, accent: 3.8 },
+      lighting: {
+        ambient: 0.17,
+        beam: 0.58,
+        focus: [0.67, 0.56],
+        focusSize: 0.62,
+        key: 2.8,
+        negativeSpace: 0.6,
+        rim: 5.3,
+        accent: 3.8,
+      },
       environment: {
         glow: 0.68,
         glowPosition: [0.26, 0.16],

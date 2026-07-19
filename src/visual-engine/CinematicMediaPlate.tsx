@@ -54,6 +54,7 @@ const mediaPlateVertexShader = /* glsl */ `
 const mediaPlateFragmentShader = /* glsl */ `
   uniform vec3 uAccent;
   uniform float uClarity;
+  uniform float uCopyShield;
   uniform float uEnergy;
   uniform float uFlow;
   uniform sampler2D uImage;
@@ -120,7 +121,11 @@ const mediaPlateFragmentShader = /* glsl */ `
     float contrast = 0.88 + uClarity * 0.2;
     color = max(vec3(0.0), (color - 0.5) * contrast + 0.5);
 
-    float copyShield = mix(0.7, 1.0, smoothstep(0.08, 0.68, vUv.x));
+    float copyShield = mix(
+      1.0 - uCopyShield * 0.62,
+      1.0,
+      smoothstep(0.08, 0.72, vUv.x)
+    );
     float edgeFade = smoothstep(0.0, 0.045, vUv.x)
       * (1.0 - smoothstep(0.955, 1.0, vUv.x))
       * smoothstep(0.0, 0.045, vUv.y)
@@ -158,6 +163,7 @@ export function CinematicMediaPlate({
     uImpact: { value: 0 },
     uOpacity: { value: enabled ? cue.media.opacity : 0 },
     uClarity: { value: 1 - Math.min(1, cue.lens.bokehScale / 1.4) },
+    uCopyShield: { value: cue.lighting.negativeSpace },
     uSpectral: { value: cue.media.tintStrength },
     uStructure: { value: cue.environment.grid },
     uTintStrength: { value: cue.media.tintStrength },
@@ -227,6 +233,12 @@ export function CinematicMediaPlate({
     materialRef.current.uniforms.uClarity.value = MathUtils.damp(
       materialRef.current.uniforms.uClarity.value,
       1 - Math.min(1, cue.lens.bokehScale / 1.4),
+      damping,
+      delta,
+    );
+    materialRef.current.uniforms.uCopyShield.value = MathUtils.damp(
+      materialRef.current.uniforms.uCopyShield.value,
+      cue.lighting.negativeSpace,
       damping,
       delta,
     );

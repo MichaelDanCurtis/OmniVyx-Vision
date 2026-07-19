@@ -15,6 +15,7 @@ import {
 } from 'react';
 import {
   AdditiveBlending,
+  AmbientLight,
   BackSide,
   CatmullRomCurve3,
   Color,
@@ -191,6 +192,10 @@ export function LaunchStage({
       data-lens-bokeh={cue.lens.bokehScale.toFixed(2)}
       data-lens-exposure={cue.lens.exposure.toFixed(2)}
       data-lens-focus-range={cue.lens.focusRange.toFixed(2)}
+      data-light-ambient={cue.lighting.ambient.toFixed(2)}
+      data-light-beam={cue.lighting.beam.toFixed(2)}
+      data-light-focus={`${cue.lighting.focus[0].toFixed(2)},${cue.lighting.focus[1].toFixed(2)}`}
+      data-light-negative-space={cue.lighting.negativeSpace.toFixed(2)}
       data-shot-dolly={cue.camera.shot.positionArc[2].toFixed(2)}
       data-shot-roll={cue.camera.shot.roll.toFixed(3)}
       data-glass-instances={OPTICAL_PANEL_LAYOUT.length}
@@ -221,6 +226,7 @@ export function LaunchStage({
       style={{
         '--stage-primary': cue.palette.primary,
         '--stage-accent': cue.palette.accent,
+        '--stage-copy-shield': (cue.lighting.negativeSpace * 0.68).toFixed(3),
         '--cue-panel-duration': `${clamp(
           scaleCueDuration(cue.transition.durationMs * 0.34, cuePace),
           240,
@@ -562,7 +568,6 @@ function LaunchScene({
     <>
       <color attach="background" args={['#03060d']} />
       <fog attach="fog" args={['#050914', 6.8, 17]} />
-      <ambientLight intensity={0.45} />
       <MotionDirector
         copyElementRef={copyElementRef}
         cue={cue}
@@ -1116,19 +1121,40 @@ function OpticalHandoff({ cue, motion }: { cue: CinematicCue; motion: StageMotio
 }
 
 function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
+  const ambientRef = useRef<AmbientLight>(null);
   const keyRef = useRef<DirectionalLight>(null);
+  const keyTargetRef = useRef<Object3D>(null);
   const rimRef = useRef<PointLight>(null);
   const accentRef = useRef<PointLight>(null);
   const keyTarget = useMemo(() => new Color(cue.palette.secondary), []);
   const rimTarget = useMemo(() => new Color(cue.palette.primary), []);
   const accentTarget = useMemo(() => new Color(cue.palette.accent), []);
 
-  useFrame((_, delta) => {
+  useLayoutEffect(() => {
+    if (keyRef.current && keyTargetRef.current) {
+      keyRef.current.target = keyTargetRef.current;
+    }
+  }, []);
+
+  useFrame(({ size }, delta) => {
     const damping = phaseDamping(cue.transition.damping, motion.actorArrival, motion.handoff);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
+    const portraitMix = 1 - MathUtils.smoothstep(size.width / size.height, 0.72, 1.25);
+    const focusX = MathUtils.lerp(cue.lighting.focus[0], 0.52, portraitMix);
+    const focusY = MathUtils.lerp(cue.lighting.focus[1], 0.56, portraitMix);
+    const worldFocusX = (focusX - 0.5) * 6.4;
+    const worldFocusY = (focusY - 0.5) * 4.2;
     keyTarget.set(cue.palette.secondary);
     rimTarget.set(cue.palette.primary);
     accentTarget.set(cue.palette.accent);
+    if (ambientRef.current) {
+      ambientRef.current.intensity = MathUtils.damp(
+        ambientRef.current.intensity,
+        cue.lighting.ambient + motion.impact * 0.025 + motion.voiceLevel * 0.035,
+        damping,
+        delta,
+      );
+    }
     if (keyRef.current) {
       keyRef.current.intensity = MathUtils.damp(
         keyRef.current.intensity,
@@ -1137,6 +1163,32 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
         delta,
       );
       keyRef.current.color.lerp(keyTarget, paletteAlpha);
+      keyRef.current.position.x = MathUtils.damp(
+        keyRef.current.position.x,
+        worldFocusX + 3.4,
+        damping,
+        delta,
+      );
+      keyRef.current.position.y = MathUtils.damp(
+        keyRef.current.position.y,
+        worldFocusY + 3.2,
+        damping,
+        delta,
+      );
+    }
+    if (keyTargetRef.current) {
+      keyTargetRef.current.position.x = MathUtils.damp(
+        keyTargetRef.current.position.x,
+        worldFocusX,
+        damping,
+        delta,
+      );
+      keyTargetRef.current.position.y = MathUtils.damp(
+        keyTargetRef.current.position.y,
+        worldFocusY,
+        damping,
+        delta,
+      );
     }
     if (rimRef.current) {
       rimRef.current.intensity = MathUtils.damp(
@@ -1150,6 +1202,18 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
         delta,
       );
       rimRef.current.color.lerp(rimTarget, paletteAlpha);
+      rimRef.current.position.x = MathUtils.damp(
+        rimRef.current.position.x,
+        worldFocusX - 3.2,
+        damping,
+        delta,
+      );
+      rimRef.current.position.y = MathUtils.damp(
+        rimRef.current.position.y,
+        worldFocusY + 2.1,
+        damping,
+        delta,
+      );
     }
     if (accentRef.current) {
       accentRef.current.intensity = MathUtils.damp(
@@ -1163,12 +1227,26 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
         delta,
       );
       accentRef.current.color.lerp(accentTarget, paletteAlpha);
+      accentRef.current.position.x = MathUtils.damp(
+        accentRef.current.position.x,
+        worldFocusX + 2.55,
+        damping,
+        delta,
+      );
+      accentRef.current.position.y = MathUtils.damp(
+        accentRef.current.position.y,
+        worldFocusY - 1.05,
+        damping,
+        delta,
+      );
     }
   });
 
   return (
     <>
+      <ambientLight ref={ambientRef} intensity={cue.lighting.ambient} />
       <directionalLight ref={keyRef} position={[4, 4, 5]} intensity={cue.lighting.key} color={cue.palette.secondary} />
+      <object3D ref={keyTargetRef} />
       <pointLight ref={rimRef} position={[-3.8, 2.2, 2.4]} intensity={cue.lighting.rim} color={cue.palette.primary} />
       <pointLight ref={accentRef} position={[3.4, -0.8, 2.4]} intensity={cue.lighting.accent} color={cue.palette.accent} />
     </>
@@ -1294,7 +1372,13 @@ const worldFragmentShader = /* glsl */ `
   uniform vec2 uGlowPosition;
   uniform float uGrid;
   uniform float uHorizon;
+  uniform float uLightBeam;
+  uniform vec2 uLightFocus;
+  uniform float uLightSize;
+  uniform float uNegativeSpace;
+  uniform float uPortrait;
   uniform vec3 uPrimary;
+  uniform vec2 uResolution;
   uniform float uRibbons;
   uniform vec3 uSecondary;
   uniform vec3 uSurface;
@@ -1332,11 +1416,30 @@ const worldFragmentShader = /* glsl */ `
       - field.y * 13.0
       + sin(field.y * 9.0 + time) * 1.8
     );
+    vec2 screenUv = gl_FragCoord.xy / max(uResolution, vec2(1.0));
+    float screenAspect = clamp(uResolution.x / max(uResolution.y, 1.0), 0.58, 2.2);
+    vec2 focalDelta = screenUv - uLightFocus;
+    focalDelta.x *= screenAspect;
+    float focalPool = exp(
+      -dot(focalDelta, focalDelta) * mix(22.0, 5.2, uLightSize)
+    );
+    vec2 shaftDelta = screenUv - uLightFocus;
+    float shaftGate = smoothstep(-0.12, 0.5, shaftDelta.y);
+    float shaftA = exp(-pow(shaftDelta.x + shaftDelta.y * 0.38, 2.0) * 88.0);
+    float shaftB = exp(-pow(shaftDelta.x + shaftDelta.y * 0.72 - 0.1, 2.0) * 118.0);
+    float lightShaft = (shaftA + shaftB * 0.58) * shaftGate * uLightBeam;
+    vec2 copyCenter = mix(vec2(0.27, 0.4), vec2(0.47, 0.14), uPortrait);
+    vec2 copyDelta = screenUv - copyCenter;
+    copyDelta *= mix(vec2(1.05, 1.32), vec2(0.78, 1.7), uPortrait);
+    float copyWell = exp(-dot(copyDelta, copyDelta) * 5.8);
     float voiceLift = 1.0 + uVoice * 0.22;
     vec3 color = uSurface * (0.72 + interference * 0.08);
     color += uPrimary * (studioGlow * 0.2 + horizon * 0.13 + ribbon * 0.09) * voiceLift;
     color += uAccent * (studioGlow * 0.08 + ribbon * 0.12 + horizon * 0.035) * voiceLift;
     color += uSecondary * grid * 0.055;
+    color += uSecondary * focalPool * (0.026 + uVoice * 0.008);
+    color += mix(uPrimary, uAccent, 0.32) * lightShaft * (0.034 + uVoice * 0.01);
+    color *= 1.0 - copyWell * uNegativeSpace * 0.54;
     gl_FragColor = vec4(color, 1.0);
   }
 `;
@@ -1345,6 +1448,7 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
   const worldMaterialRef = useRef<ShaderMaterial>(null);
   const particleGroupRef = useRef<Group>(null);
   const pointsMaterialRef = useRef<PointsMaterial>(null);
+  const drawingBufferSize = useMemo(() => new Vector2(1, 1), []);
   const paletteTargets = useMemo(() => ({
     accent: new Color(cue.palette.accent),
     primary: new Color(cue.palette.primary),
@@ -1358,7 +1462,13 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
     uGlowPosition: { value: new Vector2(...cue.environment.glowPosition) },
     uGrid: { value: cue.environment.grid },
     uHorizon: { value: cue.environment.horizon },
+    uLightBeam: { value: cue.lighting.beam },
+    uLightFocus: { value: new Vector2(...cue.lighting.focus) },
+    uLightSize: { value: cue.lighting.focusSize },
+    uNegativeSpace: { value: cue.lighting.negativeSpace },
+    uPortrait: { value: 0 },
     uPrimary: { value: new Color(cue.palette.primary) },
+    uResolution: { value: new Vector2(1, 1) },
     uRibbons: { value: cue.environment.ribbons },
     uSecondary: { value: new Color(cue.palette.secondary) },
     uSurface: { value: new Color(cue.palette.surface) },
@@ -1375,12 +1485,15 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
     return new Float32Array(positions);
   }, []);
 
-  useFrame(({ clock }, delta) => {
+  useFrame(({ clock, gl, size }, delta) => {
     if (!worldMaterialRef.current || !particleGroupRef.current || !pointsMaterialRef.current) return;
     const damping = phaseDamping(cue.transition.damping, motion.mediaArrival, motion.handoff);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     const elapsed = clock.getElapsedTime();
     const voice = Math.min(1.4, motion.voiceLevel + motion.voiceImpulse * 0.42 + motion.voicePeak * 0.28);
+    const portraitMix = 1 - MathUtils.smoothstep(size.width / size.height, 0.72, 1.25);
+    const focusX = MathUtils.lerp(cue.lighting.focus[0], 0.52, portraitMix);
+    const focusY = MathUtils.lerp(cue.lighting.focus[1], 0.56, portraitMix);
     paletteTargets.primary.set(cue.palette.primary);
     paletteTargets.secondary.set(cue.palette.secondary);
     paletteTargets.accent.set(cue.palette.accent);
@@ -1390,6 +1503,8 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
     worldMaterialRef.current.uniforms.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
     worldMaterialRef.current.uniforms.uSurface.value.lerp(paletteTargets.surface, paletteAlpha);
     worldMaterialRef.current.uniforms.uTime.value = elapsed;
+    gl.getDrawingBufferSize(drawingBufferSize);
+    worldMaterialRef.current.uniforms.uResolution.value.copy(drawingBufferSize);
     worldMaterialRef.current.uniforms.uVoice.value = MathUtils.damp(
       worldMaterialRef.current.uniforms.uVoice.value,
       voice,
@@ -1399,6 +1514,42 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
     worldMaterialRef.current.uniforms.uGlow.value = MathUtils.damp(
       worldMaterialRef.current.uniforms.uGlow.value,
       cue.environment.glow + motion.impact * 0.08 + voice * 0.12,
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uLightBeam.value = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uLightBeam.value,
+      cue.lighting.beam + motion.impact * 0.08 + voice * 0.14,
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uLightFocus.value.x = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uLightFocus.value.x,
+      focusX,
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uLightFocus.value.y = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uLightFocus.value.y,
+      focusY,
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uLightSize.value = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uLightSize.value,
+      cue.lighting.focusSize + voice * 0.025,
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uNegativeSpace.value = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uNegativeSpace.value,
+      cue.lighting.negativeSpace,
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uPortrait.value = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uPortrait.value,
+      portraitMix,
       damping,
       delta,
     );

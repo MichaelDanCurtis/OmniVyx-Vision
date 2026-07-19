@@ -796,9 +796,15 @@ textarea::placeholder {
 }
 
 .visual-engine-stage::after {
-  inset: auto 0 0;
-  height: 42%;
-  background: linear-gradient(180deg, transparent, rgba(2, 6, 23, 0.68));
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 68% 72% at 22% 72%,
+      rgba(2, 6, 13, var(--stage-copy-shield, 0.42)) 0%,
+      rgba(2, 6, 13, calc(var(--stage-copy-shield, 0.42) * 0.66)) 42%,
+      transparent 76%
+    ),
+    linear-gradient(180deg, transparent 48%, rgba(2, 6, 23, 0.58));
 }
 
 .visual-engine-copy {
@@ -1665,6 +1671,17 @@ textarea::placeholder {
   .visual-engine-stage {
     aspect-ratio: 3 / 4;
     min-height: 0;
+  }
+
+  .visual-engine-stage::after {
+    background:
+      radial-gradient(
+        ellipse 108% 46% at 48% 84%,
+        rgba(2, 6, 13, var(--stage-copy-shield, 0.42)) 0%,
+        rgba(2, 6, 13, calc(var(--stage-copy-shield, 0.42) * 0.68)) 48%,
+        transparent 82%
+      ),
+      linear-gradient(180deg, transparent 52%, rgba(2, 6, 23, 0.64));
   }
 
   .visual-engine-copy {
