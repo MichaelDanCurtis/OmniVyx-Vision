@@ -1,11 +1,13 @@
 import type { StageEventId } from './stageScore';
 
 export type Vector3Tuple = readonly [number, number, number];
+export type Vector2Tuple = readonly [number, number];
 
 export interface CinematicCue {
   copy: {
     eyebrow: string;
     headline: string;
+    headlineLines: readonly string[];
     body: string;
   };
   camera: {
@@ -16,6 +18,10 @@ export interface CinematicCue {
   transition: {
     durationMs: number;
     damping: number;
+    copyDelayMs: number;
+    copyOffset: Vector2Tuple;
+    sweepAngle: number;
+    sweepIntensity: number;
   };
   composition: {
     coreScale: number;
@@ -44,7 +50,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -62,7 +68,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -71,10 +77,18 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       copy: {
         eyebrow: 'OmniVyx Vision',
         headline: 'The stage is listening.',
+        headlineLines: ['The stage is', 'listening.'],
         body: 'A cinematic presentation system directed by the meaning and rhythm of your voice.',
       },
       camera: { position: [0, 1.55, 7.5], target: [0, 0.05, 0], fov: 42 },
-      transition: { durationMs: 1_600, damping: 3.8 },
+      transition: {
+        durationMs: 1_600,
+        damping: 3.8,
+        copyDelayMs: 100,
+        copyOffset: [0, 36],
+        sweepAngle: 0.15,
+        sweepIntensity: 0.74,
+      },
       composition: {
         coreScale: 0.72,
         growthScale: 0.03,
@@ -100,10 +114,18 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       copy: {
         eyebrow: 'Introducing OmniVyx',
         headline: 'Presentations, performed.',
+        headlineLines: ['Presentations,', 'performed.'],
         body: 'Not a sequence of slides. A responsive visual world that moves with the room.',
       },
       camera: { position: [-0.62, 1.34, 6.08], target: [0.08, 0.1, 0], fov: 38 },
-      transition: { durationMs: 1_150, damping: 5.6 },
+      transition: {
+        durationMs: 1_150,
+        damping: 5.6,
+        copyDelayMs: 80,
+        copyOffset: [-72, 12],
+        sweepAngle: 0,
+        sweepIntensity: 0.95,
+      },
       composition: {
         coreScale: 1.12,
         growthScale: 0.04,
@@ -129,10 +151,18 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       copy: {
         eyebrow: 'Live direction',
         headline: 'Intent becomes motion.',
+        headlineLines: ['Intent becomes', 'motion.'],
         body: 'Your words shape composition, pacing, emphasis, and the next visual beat in real time.',
       },
       camera: { position: [0.34, 1.43, 6.72], target: [-0.2, 0.12, -0.15], fov: 40 },
-      transition: { durationMs: 1_300, damping: 4.8 },
+      transition: {
+        durationMs: 1_300,
+        damping: 4.8,
+        copyDelayMs: 100,
+        copyOffset: [0, 42],
+        sweepAngle: 1.15,
+        sweepIntensity: 0.8,
+      },
       composition: {
         coreScale: 0.92,
         growthScale: 0.05,
@@ -158,10 +188,18 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       copy: {
         eyebrow: 'Generative narrative',
         headline: 'Every idea can grow.',
+        headlineLines: ['Every idea', 'can grow.'],
         body: 'Stories, evidence, live data, and generated worlds remain part of one continuous composition.',
       },
       camera: { position: [0.92, 1.2, 6.2], target: [0.42, 0.22, -0.1], fov: 39 },
-      transition: { durationMs: 1_700, damping: 3.4 },
+      transition: {
+        durationMs: 1_700,
+        damping: 3.4,
+        copyDelayMs: 120,
+        copyOffset: [46, 28],
+        sweepAngle: -0.55,
+        sweepIntensity: 0.88,
+      },
       composition: {
         coreScale: 0.04,
         growthScale: 1,
@@ -187,10 +225,18 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       copy: {
         eyebrow: 'Dynamic evidence',
         headline: 'The numbers arrive on cue.',
+        headlineLines: ['The numbers', 'arrive on cue.'],
         body: 'Prepared data enters the stage when the conversation needs it, then yields to the story.',
       },
       camera: { position: [0.46, 1.28, 5.82], target: [0.48, 0.08, 0.18], fov: 37 },
-      transition: { durationMs: 900, damping: 6.4 },
+      transition: {
+        durationMs: 900,
+        damping: 6.4,
+        copyDelayMs: 60,
+        copyOffset: [84, 0],
+        sweepAngle: 3.1416,
+        sweepIntensity: 1.1,
+      },
       composition: {
         coreScale: 0.02,
         growthScale: 0.04,
@@ -216,10 +262,18 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       copy: {
         eyebrow: 'Hold the room',
         headline: 'Stay with the moment.',
+        headlineLines: ['Stay with', 'the moment.'],
         body: 'The stage keeps breathing without competing with the presenter or forcing the next beat.',
       },
       camera: { position: [0.16, 1.35, 6.82], target: [0, 0.08, 0], fov: 41 },
-      transition: { durationMs: 1_900, damping: 3 },
+      transition: {
+        durationMs: 1_900,
+        damping: 3,
+        copyDelayMs: 160,
+        copyOffset: [0, 14],
+        sweepAngle: 1.5708,
+        sweepIntensity: 0.25,
+      },
       composition: {
         coreScale: 0.52,
         growthScale: 0.38,
@@ -245,10 +299,18 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
       copy: {
         eyebrow: 'One continuous performance',
         headline: 'Make the room feel it.',
+        headlineLines: ['Make the room', 'feel it.'],
         body: 'Authored with AI. Rehearsed with a human. Performed together, live.',
       },
       camera: { position: [0, 1.45, 6.38], target: [0.08, 0.1, 0], fov: 39 },
-      transition: { durationMs: 1_850, damping: 3.6 },
+      transition: {
+        durationMs: 1_850,
+        damping: 3.6,
+        copyDelayMs: 110,
+        copyOffset: [-40, 32],
+        sweepAngle: 0.35,
+        sweepIntensity: 1,
+      },
       composition: {
         coreScale: 1.02,
         growthScale: 0.82,

@@ -58,6 +58,8 @@ The visual grammar is cue-directed rather than globally decorative. Each cue aut
 
 Semantic transitions and presenter energy are separate control channels. An accepted intent changes the deterministic stage event, while every accepted presenter utterance may also emit a bounded transient pulse that affects camera, lighting, cloth, glass, and hero motion without mutating the active event. Cue arrival, impact, and overshoot values plus the presenter pulse live on one stable mutable motion bus, keeping choreography synchronized without React state updates or render-loop allocations.
 
+Show schema version 2 adds authored headline lines, copy entrance vectors, copy timing, and optical sweep direction and intensity to every cue. The renderer interprets those values as masked kinetic typography plus a camera-space transition veil, so each beat has deliberate editorial motion while the veil remains one draw call. Render telemetry samples after the post-processing composer, reports actual frame rate, calls, and triangles, and explicitly resets Three.js counters without taking over the low-quality render loop.
+
 ## Render Quality Contract
 
 High quality is adaptive rather than a fixed pixel ratio. The stage measures sustained frame performance, selects a bounded device pixel ratio, and temporarily regresses resolution during scored transitions. The manual low-quality gate remains available as a deterministic fallback and disables post-processing.

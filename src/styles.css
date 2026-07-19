@@ -808,16 +808,37 @@ textarea::placeholder {
   bottom: clamp(24px, 5vw, 58px);
   width: min(520px, calc(100% - 48px));
   text-shadow: 0 20px 50px rgba(0, 0, 0, 0.56);
-  animation: stageCopyEnter var(--cue-copy-duration, 720ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.visual-engine-copy .eyebrow {
+  animation: stageMetaEnter 440ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--cue-copy-delay, 80ms);
   will-change: opacity, transform;
 }
 
 .visual-engine-copy h2 {
   margin: 0;
   color: #f8fafc;
-  font-size: clamp(44px, 5.25rem, 96px);
+  font-size: 76px;
   line-height: 0.9;
   letter-spacing: 0;
+}
+
+.stage-copy-line {
+  display: block;
+  overflow: hidden;
+  margin: -0.06em 0;
+  padding: 0.06em 0;
+}
+
+.stage-copy-line > span {
+  display: block;
+  transform-origin: left bottom;
+  animation: stageLineEnter var(--cue-copy-duration, 720ms) cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(
+    var(--cue-copy-delay, 80ms) + var(--line-index, 0) * var(--cue-line-stagger, 64ms)
+  );
+  will-change: opacity, transform, filter;
 }
 
 .visual-engine-copy p:not(.eyebrow) {
@@ -826,6 +847,9 @@ textarea::placeholder {
   color: rgba(226, 232, 240, 0.82);
   font-size: clamp(15px, 1.3vw, 18px);
   line-height: 1.46;
+  animation: stageBodyEnter 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--cue-copy-delay, 80ms) + 180ms);
+  will-change: opacity, transform;
 }
 
 .stage-performance {
@@ -948,10 +972,34 @@ textarea::placeholder {
   right: 24px;
 }
 
-@keyframes stageCopyEnter {
+@keyframes stageMetaEnter {
   from {
     opacity: 0;
-    transform: translate3d(0, 22px, 0);
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes stageLineEnter {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translate3d(var(--cue-copy-x, 0), var(--cue-copy-y, 24px), 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes stageBodyEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
   }
   to {
     opacity: 1;
@@ -980,6 +1028,18 @@ textarea::placeholder {
 .stage-dynamic-panel.visible {
   opacity: 1;
   transform: translate3d(0, 0, 0) scale(1);
+}
+
+.visual-engine-stage[data-stage-event="summon_dynamic_chart"] .stage-dynamic-panel {
+  top: 6px;
+  right: 64px;
+}
+
+.visual-engine-proof.presenting
+  .visual-engine-stage[data-stage-event="summon_dynamic_chart"]
+  .stage-dynamic-panel {
+  top: 76px;
+  right: 24px;
 }
 
 .stage-dynamic-panel span {
@@ -1393,7 +1453,7 @@ textarea::placeholder {
   }
 
   .visual-engine-stage {
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 3 / 4;
     min-height: 0;
   }
 
@@ -1404,15 +1464,34 @@ textarea::placeholder {
   }
 
   .visual-engine-copy h2 {
-    font-size: 52px;
+    font-size: 44px;
     line-height: 0.94;
   }
 
   .stage-dynamic-panel {
     left: 20px;
     right: 20px;
-    top: 20px;
+    top: 64px;
     width: auto;
+    padding: 12px;
+  }
+
+  .visual-engine-stage[data-stage-event="summon_dynamic_chart"] .stage-dynamic-panel,
+  .visual-engine-proof.presenting
+    .visual-engine-stage[data-stage-event="summon_dynamic_chart"]
+    .stage-dynamic-panel {
+    left: 20px;
+    right: 20px;
+    top: 64px;
+  }
+
+  .stage-chart-summary {
+    margin-top: 12px;
+  }
+
+  .stage-chart-bars {
+    height: 72px;
+    margin-top: 10px;
   }
 
   .stage-performance {
@@ -1426,7 +1505,7 @@ textarea::placeholder {
   }
 
   .visual-engine-proof.presenting .visual-engine-copy h2 {
-    font-size: 58px;
+    font-size: 44px;
   }
 
   .canvas-copy {
@@ -1464,7 +1543,9 @@ textarea::placeholder {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .visual-engine-copy {
+  .visual-engine-copy .eyebrow,
+  .stage-copy-line > span,
+  .visual-engine-copy p:not(.eyebrow) {
     animation: none;
   }
 }

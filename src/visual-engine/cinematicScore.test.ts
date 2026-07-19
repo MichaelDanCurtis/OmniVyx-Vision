@@ -8,7 +8,7 @@ import { stageEvents } from './stageScore';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(1);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(2);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -24,6 +24,10 @@ describe('cinematicScore', () => {
         cue.camera.fov,
         cue.transition.durationMs,
         cue.transition.damping,
+        cue.transition.copyDelayMs,
+        ...cue.transition.copyOffset,
+        cue.transition.sweepAngle,
+        cue.transition.sweepIntensity,
         ...Object.values(cue.composition),
         ...Object.values(cue.lighting),
         cue.motionEnergy,
@@ -34,6 +38,11 @@ describe('cinematicScore', () => {
       expect(cue.camera.fov).toBeGreaterThanOrEqual(30);
       expect(cue.camera.fov).toBeLessThanOrEqual(55);
       expect(cue.copy.headline.length).toBeGreaterThan(0);
+      expect(cue.copy.headlineLines.join(' ')).toBe(cue.copy.headline);
+      expect(cue.copy.headlineLines.length).toBeGreaterThanOrEqual(2);
+      expect(cue.transition.copyDelayMs).toBeGreaterThanOrEqual(0);
+      expect(cue.transition.sweepIntensity).toBeGreaterThanOrEqual(0);
+      expect(cue.transition.sweepIntensity).toBeLessThanOrEqual(1.2);
       expect(Object.values(cue.palette).every((color) => /^#[0-9a-f]{6}$/i.test(color))).toBe(true);
     }
   });

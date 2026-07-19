@@ -35,6 +35,12 @@ interface StageMotionBus extends CueMotionSample {
   voiceImpulse: number;
 }
 
+interface RenderTelemetry {
+  calls: number;
+  fps: number;
+  triangles: number;
+}
+
 interface LaunchStageProps {
   presenterPulse?: number;
   presenting?: boolean;
@@ -53,10 +59,16 @@ export function LaunchStage({
     factor: state.quality === 'high' ? 0.72 : 0,
     fps: 0,
   });
+  const [renderTelemetry, setRenderTelemetry] = useState<RenderTelemetry>({
+    calls: 0,
+    fps: 0,
+    triangles: 0,
+  });
   const adaptiveDpr = state.quality === 'high'
     ? roundToStep(0.92 + performanceProfile.factor * 0.78, 0.05)
     : 1;
   const effectsEnabled = state.effectsEnabled;
+  const measuredFps = renderTelemetry.fps || performanceProfile.fps;
 
   useEffect(() => {
     setPerformanceProfile({
@@ -71,12 +83,18 @@ export function LaunchStage({
       data-stage-event={state.activeEvent}
       data-quality={state.quality}
       data-render-scale={adaptiveDpr.toFixed(2)}
-      data-fps={performanceProfile.fps}
+      data-fps={measuredFps}
+      data-draw-calls={renderTelemetry.calls}
+      data-triangles={renderTelemetry.triangles}
       data-presenter-pulse={presenterPulse}
       style={{
         '--stage-primary': cue.palette.primary,
         '--stage-accent': cue.palette.accent,
         '--cue-copy-duration': `${clamp(cue.transition.durationMs * 0.52, 420, 900)}ms`,
+        '--cue-copy-delay': `${cue.transition.copyDelayMs}ms`,
+        '--cue-copy-x': `${cue.transition.copyOffset[0]}px`,
+        '--cue-copy-y': `${cue.transition.copyOffset[1]}px`,
+        '--cue-line-stagger': `${clamp(cue.transition.durationMs * 0.055, 48, 86)}ms`,
         '--cue-panel-duration': `${clamp(cue.transition.durationMs * 0.34, 260, 520)}ms`,
       } as CSSProperties}
     >
@@ -107,6 +125,7 @@ export function LaunchStage({
         >
           <AdaptiveDpr />
           <TransitionPerformanceRegressor eventId={state.activeEvent} />
+          <RenderTelemetryProbe effectsEnabled={effectsEnabled} onChange={setRenderTelemetry} />
           <LaunchScene
             cue={cue}
             effectsEnabled={effectsEnabled}
@@ -118,14 +137,20 @@ export function LaunchStage({
 
       <div className="visual-engine-copy" key={state.activeEvent}>
         <p className="eyebrow">{cue.copy.eyebrow}</p>
-        <h2>{cue.copy.headline}</h2>
+        <h2 aria-label={cue.copy.headline}>
+          {cue.copy.headlineLines.map((line, index) => (
+            <span className="stage-copy-line" key={line} aria-hidden="true">
+              <span style={{ '--line-index': index } as CSSProperties}>{line}</span>
+            </span>
+          ))}
+        </h2>
         <p>{cue.copy.body}</p>
       </div>
 
       <div className="stage-performance" aria-label="Adaptive render performance">
         <span>AUTO</span>
-        <strong>{performanceProfile.fps > 0 ? `${performanceProfile.fps} FPS` : 'CALIBRATING'}</strong>
-        <i>{adaptiveDpr.toFixed(2)}x</i>
+        <strong>{measuredFps > 0 ? `${measuredFps} FPS` : 'CALIBRATING'}</strong>
+        <i>{adaptiveDpr.toFixed(2)}x / {renderTelemetry.calls || '-'} calls</i>
       </div>
 
       {onTogglePresenting ? (
@@ -191,6 +216,7 @@ function LaunchScene({ cue, effectsEnabled, presenterPulse, state }: LaunchScene
       <CinematicLighting cue={cue} motion={motion} />
 
       <CameraRig cue={cue} motion={motion} />
+      <TransitionVeil cue={cue} motion={motion} />
       <StageEnvironment cue={cue} motion={motion} />
       <SilkField cue={cue} motion={motion} />
       <SilkField cue={cue} foreground motion={motion} />
@@ -275,6 +301,155 @@ function TransitionPerformanceRegressor({ eventId }: { eventId: StageEventId }) 
   }, [eventId, regress]);
 
   return null;
+}
+
+function RenderTelemetryProbe({
+  effectsEnabled,
+  onChange,
+}: {
+  effectsEnabled: boolean;
+  onChange: (telemetry: RenderTelemetry) => void;
+}) {
+  const gl = useThree((threeState) => threeState.gl);
+  const lastReportRef = useRef(0);
+  const frameCountRef = useRef(0);
+  const lastCallsRef = useRef(-1);
+  const lastFpsRef = useRef(-1);
+  const lastTrianglesRef = useRef(-1);
+
+  useEffect(() => {
+    gl.info.autoReset = !effectsEnabled;
+    gl.info.reset();
+    frameCountRef.current = 0;
+    lastReportRef.current = 0;
+    return () => {
+      gl.info.autoReset = true;
+      gl.info.reset();
+    };
+  }, [effectsEnabled, gl]);
+
+  useFrame(({ clock }) => {
+    const now = clock.getElapsedTime();
+    frameCountRef.current += 1;
+    const calls = gl.info.render.calls;
+    const triangles = gl.info.render.triangles;
+    if (effectsEnabled) gl.info.reset();
+    if (lastReportRef.current === 0) {
+      lastReportRef.current = now;
+      frameCountRef.current = 0;
+      return;
+    }
+
+    const elapsed = now - lastReportRef.current;
+    if (elapsed < 0.75) return;
+
+    lastReportRef.current = now;
+    const fps = Math.round(frameCountRef.current / elapsed);
+    frameCountRef.current = 0;
+    if (
+      calls === lastCallsRef.current
+      && fps === lastFpsRef.current
+      && triangles === lastTrianglesRef.current
+    ) return;
+
+    lastCallsRef.current = calls;
+    lastFpsRef.current = fps;
+    lastTrianglesRef.current = triangles;
+    onChange({ calls, fps, triangles });
+  }, effectsEnabled ? 2 : 0);
+
+  return null;
+}
+
+const transitionVeilVertexShader = /* glsl */ `
+  varying vec2 vUv;
+
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const transitionVeilFragmentShader = /* glsl */ `
+  uniform float uAngle;
+  uniform vec3 uColor;
+  uniform vec3 uAccent;
+  uniform float uIntensity;
+  uniform float uProgress;
+  varying vec2 vUv;
+
+  void main() {
+    vec2 axis = vec2(cos(uAngle), sin(uAngle));
+    float coordinate = dot(vUv - 0.5, axis) + 0.5;
+    float travel = smoothstep(0.0, 0.78, uProgress);
+    float center = mix(-0.28, 1.28, travel);
+    float distanceToSweep = abs(coordinate - center);
+    float filament = exp(-pow(distanceToSweep * 17.0, 1.55));
+    float aura = exp(-pow(distanceToSweep * 5.0, 2.0));
+    float enter = smoothstep(0.01, 0.1, uProgress);
+    float exit = 1.0 - smoothstep(0.64, 0.96, uProgress);
+    float interference = 0.9 + 0.1 * sin(vUv.y * 28.0 + sin(vUv.x * 9.0) * 2.0);
+    vec3 color = mix(uColor, uAccent, smoothstep(0.15, 0.86, vUv.y));
+    float alpha = (filament * 0.14 + aura * 0.04) * uIntensity * enter * exit * interference;
+
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+function TransitionVeil({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
+  const meshRef = useRef<Mesh>(null);
+  const materialRef = useRef<ShaderMaterial>(null);
+  const paletteTargets = useMemo(
+    () => ({
+      color: new Color(cue.palette.primary),
+      accent: new Color(cue.palette.accent),
+    }),
+    [],
+  );
+  const uniforms = useMemo(() => ({
+    uAngle: { value: cue.transition.sweepAngle },
+    uColor: { value: new Color(cue.palette.primary) },
+    uAccent: { value: new Color(cue.palette.accent) },
+    uIntensity: { value: cue.transition.sweepIntensity },
+    uProgress: { value: 0 },
+  }), []);
+
+  useFrame(({ camera, size }, delta) => {
+    if (!meshRef.current || !materialRef.current) return;
+
+    const perspectiveCamera = camera as PerspectiveCamera;
+    const distance = 0.8;
+    const viewHeight = 2 * Math.tan(MathUtils.degToRad(perspectiveCamera.fov * 0.5)) * distance;
+    const viewWidth = viewHeight * (size.width / size.height);
+    meshRef.current.position.copy(camera.position);
+    meshRef.current.quaternion.copy(camera.quaternion);
+    meshRef.current.translateZ(-distance);
+    meshRef.current.scale.set(viewWidth * 0.54, viewHeight * 0.54, 1);
+
+    const paletteAlpha = 1 - Math.exp(-cue.transition.damping * delta);
+    paletteTargets.color.set(cue.palette.primary);
+    paletteTargets.accent.set(cue.palette.accent);
+    materialRef.current.uniforms.uColor.value.lerp(paletteTargets.color, paletteAlpha);
+    materialRef.current.uniforms.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
+    materialRef.current.uniforms.uAngle.value = cue.transition.sweepAngle;
+    materialRef.current.uniforms.uIntensity.value = cue.transition.sweepIntensity;
+    materialRef.current.uniforms.uProgress.value = motion.progress;
+  });
+
+  return (
+    <mesh ref={meshRef} frustumCulled={false} renderOrder={100}>
+      <planeGeometry args={[2, 2]} />
+      <shaderMaterial
+        ref={materialRef}
+        args={[{ uniforms, vertexShader: transitionVeilVertexShader, fragmentShader: transitionVeilFragmentShader }]}
+        blending={AdditiveBlending}
+        depthTest={false}
+        depthWrite={false}
+        toneMapped={false}
+        transparent
+      />
+    </mesh>
+  );
 }
 
 function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
