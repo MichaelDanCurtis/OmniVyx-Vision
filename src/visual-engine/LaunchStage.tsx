@@ -193,6 +193,9 @@ export function LaunchStage({
       data-organic-scale={cue.composition.growthScale.toFixed(2)}
       data-evidence-active={state.dynamicChartVisible}
       data-evidence-points={launchEvidence.points.length}
+      data-media-flow={cue.environment.ribbons.toFixed(2)}
+      data-media-spectral={cue.media.tintStrength.toFixed(2)}
+      data-media-structure={cue.environment.grid.toFixed(2)}
       data-cue-effective-duration={Math.round(scaleCueDuration(cue.transition.durationMs, cuePace))}
       data-cue-pace={cuePace.toFixed(3)}
       data-world-drift={cue.environment.drift.toFixed(2)}

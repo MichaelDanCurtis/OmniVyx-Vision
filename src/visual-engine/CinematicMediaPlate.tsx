@@ -27,8 +27,12 @@ interface CinematicMediaPlateProps {
 }
 
 const mediaPlateVertexShader = /* glsl */ `
-  uniform float uTime;
   uniform float uEnergy;
+  uniform float uFlow;
+  uniform float uImpact;
+  uniform float uStructure;
+  uniform float uTime;
+  varying float vFold;
   varying vec2 vUv;
 
   void main() {
@@ -37,42 +41,92 @@ const mediaPlateVertexShader = /* glsl */ `
     float envelope = sin(uv.x * 3.14159) * sin(uv.y * 3.14159);
     float broadFold = sin(uv.x * 7.2 + uTime * 0.12) * 0.72;
     float crossFold = cos(uv.y * 8.4 - uTime * 0.09) * 0.28;
-    displaced.z += (broadFold + crossFold) * 0.11 * uEnergy * envelope;
+    float membrane = sin((uv.x + uv.y * 0.38) * 12.0 + uTime * 0.16) * 0.54;
+    float flowWeight = uFlow * (1.0 - uStructure * 0.48);
+    float fold = broadFold + crossFold + membrane * flowWeight;
+    vFold = fold * envelope;
+    displaced.z += fold * (0.085 + flowWeight * 0.055 + uImpact * 0.025) * uEnergy * envelope;
+    displaced.x += sin(uv.y * 9.0 - uTime * 0.1) * 0.015 * flowWeight * uEnergy * envelope;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
   }
 `;
 
 const mediaPlateFragmentShader = /* glsl */ `
-  uniform sampler2D uImage;
-  uniform float uTime;
-  uniform float uEnergy;
-  uniform float uOpacity;
-  uniform float uTintStrength;
-  uniform vec3 uPrimary;
   uniform vec3 uAccent;
+  uniform float uClarity;
+  uniform float uEnergy;
+  uniform float uFlow;
+  uniform sampler2D uImage;
+  uniform float uImpact;
+  uniform float uOpacity;
+  uniform vec3 uPrimary;
+  uniform vec3 uSecondary;
+  uniform float uSpectral;
+  uniform float uStructure;
+  uniform float uTime;
+  uniform float uTintStrength;
+  uniform float uVoice;
+  varying float vFold;
   varying vec2 vUv;
 
   void main() {
     vec2 uv = vUv;
     vec2 drift = vec2(
-      sin(uv.y * 9.0 + uTime * 0.11),
-      cos(uv.x * 7.0 - uTime * 0.08)
+      sin(uv.y * 9.0 + uTime * (0.09 + uFlow * 0.035)),
+      cos(uv.x * 7.0 - uTime * (0.07 + uFlow * 0.025))
     );
-    uv += drift * 0.0024 * uEnergy;
+    float refraction = 0.0014 + uFlow * 0.0022 + uVoice * 0.00045;
+    uv += drift * refraction * uEnergy;
     uv = clamp(uv, vec2(0.002), vec2(0.998));
 
-    vec4 source = texture2D(uImage, uv);
-    float luminance = dot(source.rgb, vec3(0.2126, 0.7152, 0.0722));
+    vec2 splitAxis = normalize(vec2(0.84, 0.38 + sin(uTime * 0.12) * 0.08));
+    float splitAmount = (0.00035 + uSpectral * 0.0021) * (0.72 + uEnergy * 0.28);
+    vec3 centerSample = texture2D(uImage, uv).rgb;
+    vec3 positiveSample = texture2D(
+      uImage,
+      clamp(uv + splitAxis * splitAmount, vec2(0.002), vec2(0.998))
+    ).rgb;
+    float oppositeBlue = clamp(
+      centerSample.b + (centerSample.b - positiveSample.b),
+      0.0,
+      1.2
+    );
+    vec3 spectralSample = vec3(positiveSample.r, centerSample.g, oppositeBlue);
+    vec3 source = mix(centerSample, spectralSample, smoothstep(0.08, 0.62, uSpectral));
+    float luminance = dot(source, vec3(0.2126, 0.7152, 0.0722));
     vec3 tint = mix(vec3(1.0), uPrimary, uTintStrength * 0.24);
-    vec3 color = source.rgb * tint;
+    vec3 color = source * tint;
     color += uAccent * smoothstep(0.48, 0.96, luminance) * uTintStrength * 0.075;
+
+    float membrane = sin((vUv.x * 1.18 + vUv.y) * 18.0 + uTime * 0.22) * 0.5 + 0.5;
+    membrane = pow(membrane, 9.0) * uFlow;
+    float verticalStrata = smoothstep(
+      0.46,
+      0.5,
+      abs(fract(vUv.x * 11.0 + uTime * 0.006) - 0.5)
+    );
+    float horizontalStrata = smoothstep(
+      0.47,
+      0.5,
+      abs(fract(vUv.y * 8.0 - uTime * 0.004) - 0.5)
+    );
+    float structure = max(verticalStrata * 0.58, horizontalStrata) * uStructure;
+    vec3 spectrum = 0.5 + 0.5 * cos(
+      6.28318 * (luminance * 0.34 + vFold * 0.11 + vec3(0.0, 0.14, 0.31))
+    );
+    color += mix(uPrimary, uSecondary, vUv.y) * membrane * (0.025 + uVoice * 0.012);
+    color += uSecondary * structure * (0.035 + uImpact * 0.018);
+    color = mix(color, color * (0.86 + spectrum * 0.24), uSpectral * 0.16);
+    float contrast = 0.88 + uClarity * 0.2;
+    color = max(vec3(0.0), (color - 0.5) * contrast + 0.5);
 
     float copyShield = mix(0.7, 1.0, smoothstep(0.08, 0.68, vUv.x));
     float edgeFade = smoothstep(0.0, 0.045, vUv.x)
       * (1.0 - smoothstep(0.955, 1.0, vUv.x))
       * smoothstep(0.0, 0.045, vUv.y)
       * (1.0 - smoothstep(0.955, 1.0, vUv.y));
-    gl_FragColor = vec4(color * copyShield, uOpacity * edgeFade);
+    float foldLight = 0.94 + smoothstep(-0.4, 0.8, vFold) * 0.08;
+    gl_FragColor = vec4(color * copyShield * foldLight, uOpacity * edgeFade);
     #include <colorspace_fragment>
   }
 `;
@@ -91,6 +145,7 @@ export function CinematicMediaPlate({
   const paletteTargets = useMemo(
     () => ({
       primary: new Color(cue.palette.primary),
+      secondary: new Color(cue.palette.secondary),
       accent: new Color(cue.palette.accent),
     }),
     [],
@@ -99,10 +154,17 @@ export function CinematicMediaPlate({
     uImage: { value: texture },
     uTime: { value: 0 },
     uEnergy: { value: cue.media.drift },
+    uFlow: { value: cue.environment.ribbons },
+    uImpact: { value: 0 },
     uOpacity: { value: enabled ? cue.media.opacity : 0 },
+    uClarity: { value: 1 - Math.min(1, cue.lens.bokehScale / 1.4) },
+    uSpectral: { value: cue.media.tintStrength },
+    uStructure: { value: cue.environment.grid },
     uTintStrength: { value: cue.media.tintStrength },
     uPrimary: { value: new Color(cue.palette.primary) },
+    uSecondary: { value: new Color(cue.palette.secondary) },
     uAccent: { value: new Color(cue.palette.accent) },
+    uVoice: { value: 0 },
   }), [texture]);
 
   useEffect(() => {
@@ -119,7 +181,12 @@ export function CinematicMediaPlate({
       : cue.transition.damping * (0.32 + motion.mediaArrival * 1.08);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     const targetOpacity = enabled ? cue.media.opacity : 0;
+    const voice = Math.min(
+      1.4,
+      motion.voiceLevel + motion.voiceImpulse * 0.48 + motion.voicePeak * 0.22,
+    );
     paletteTargets.primary.set(cue.palette.primary);
+    paletteTargets.secondary.set(cue.palette.secondary);
     paletteTargets.accent.set(cue.palette.accent);
 
     playbackRateRef.current = MathUtils.damp(
@@ -145,6 +212,36 @@ export function CinematicMediaPlate({
       damping,
       delta,
     );
+    materialRef.current.uniforms.uFlow.value = MathUtils.damp(
+      materialRef.current.uniforms.uFlow.value,
+      cue.environment.ribbons,
+      damping,
+      delta,
+    );
+    materialRef.current.uniforms.uImpact.value = MathUtils.damp(
+      materialRef.current.uniforms.uImpact.value,
+      motion.impact + motion.voiceImpulse * 0.28,
+      damping,
+      delta,
+    );
+    materialRef.current.uniforms.uClarity.value = MathUtils.damp(
+      materialRef.current.uniforms.uClarity.value,
+      1 - Math.min(1, cue.lens.bokehScale / 1.4),
+      damping,
+      delta,
+    );
+    materialRef.current.uniforms.uSpectral.value = MathUtils.damp(
+      materialRef.current.uniforms.uSpectral.value,
+      cue.media.tintStrength,
+      damping,
+      delta,
+    );
+    materialRef.current.uniforms.uStructure.value = MathUtils.damp(
+      materialRef.current.uniforms.uStructure.value,
+      cue.environment.grid,
+      damping,
+      delta,
+    );
     materialRef.current.uniforms.uTintStrength.value = MathUtils.damp(
       materialRef.current.uniforms.uTintStrength.value,
       cue.media.tintStrength,
@@ -152,7 +249,14 @@ export function CinematicMediaPlate({
       delta,
     );
     materialRef.current.uniforms.uPrimary.value.lerp(paletteTargets.primary, paletteAlpha);
+    materialRef.current.uniforms.uSecondary.value.lerp(paletteTargets.secondary, paletteAlpha);
     materialRef.current.uniforms.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
+    materialRef.current.uniforms.uVoice.value = MathUtils.damp(
+      materialRef.current.uniforms.uVoice.value,
+      voice,
+      damping,
+      delta,
+    );
 
     meshRef.current.visible = enabled || materialRef.current.uniforms.uOpacity.value > 0.004;
     meshRef.current.position.x = MathUtils.damp(

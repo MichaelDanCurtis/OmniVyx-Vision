@@ -6,7 +6,7 @@
 - Source dimensions: 1672x941 (16:9).
 - Runtime asset: JPEG quality 90, 281 KB.
 - Composition contract: dark lower-left copy field; optical detail concentrated center to upper-right; no text, logos, people, UI, or recognizable product.
-- Runtime treatment: one cached texture, depth-displaced shader geometry, slow UV refraction, cue palette tint, and presenter-energy response.
+- Runtime treatment: one cached texture and one draw. The shader uses two texture taps plus a first-order opposite-channel estimate for restrained spectral separation, depth-displaced membrane flow, cue-scored structural strata and clarity, palette grading, and bounded presenter-energy response. Low quality removes the plate from the draw path.
 
 ## Generation Prompt
 

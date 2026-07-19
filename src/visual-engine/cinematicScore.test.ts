@@ -156,6 +156,20 @@ describe('cinematicScore', () => {
     expect(chart.bloom).toBeLessThan(reveal.bloom);
   });
 
+  it('scores distinct single-pass media treatments from the shared optical master', () => {
+    const reveal = getCinematicCue('reveal_product');
+    const direction = getCinematicCue('explain_value');
+    const growth = getCinematicCue('grow_system');
+    const chart = getCinematicCue('summon_dynamic_chart');
+    const hold = getCinematicCue('hold');
+
+    expect(growth.environment.ribbons).toBeGreaterThan(reveal.environment.ribbons);
+    expect(growth.media.tintStrength).toBeGreaterThan(direction.media.tintStrength);
+    expect(chart.environment.grid).toBeGreaterThan(0.5);
+    expect(chart.lens.bokehScale).toBeLessThan(reveal.lens.bokehScale);
+    expect(hold.media.opacity).toBeLessThan(reveal.media.opacity);
+  });
+
   it('authors distinct organic, evidence, quiet, and product worlds', () => {
     const reveal = getCinematicCue('reveal_product').environment;
     const growth = getCinematicCue('grow_system').environment;
