@@ -41,6 +41,7 @@ import {
   transitionSignatureIndex,
   type CinematicCue,
 } from './cinematicScore';
+import { sceneSignatureIndex, sceneSignatureShader } from './sceneSignature';
 import {
   decayImpulse,
   sampleCameraShotArc,
@@ -230,6 +231,9 @@ export function LaunchStage({
       data-media-flow={cue.environment.ribbons.toFixed(2)}
       data-media-spectral={cue.media.tintStrength.toFixed(2)}
       data-media-structure={cue.environment.grid.toFixed(2)}
+      data-scene-signature={cue.environment.signature}
+      data-scene-signature-motion={!reducedMotion}
+      data-scene-signature-transition={reducedMotion ? 'instant' : 'crossfade'}
       data-cue-effective-duration={Math.round(scaleCueDuration(cue.transition.durationMs, cuePace))}
       data-cue-pace={cuePace.toFixed(3)}
       data-world-drift={cue.environment.drift.toFixed(2)}
@@ -605,12 +609,13 @@ function LaunchScene({
 
       <CameraRig cue={cue} motion={motion} />
       <OpticalHandoff cue={cue} enabled={!reducedMotion} motion={motion} />
-      <StageEnvironment cue={cue} motion={motion} />
+      <StageEnvironment cue={cue} motion={motion} reducedMotion={reducedMotion} />
       <CinematicMediaPlate
         cue={cue}
         enabled={state.quality === 'high'}
         motion={motion}
         playbackRate={state.mediaPlaybackRate}
+        reducedMotion={reducedMotion}
       />
       <SilkField cue={cue} motion={motion} />
       <SilkField cue={cue} foreground motion={motion} />
@@ -1656,11 +1661,17 @@ const worldFragmentShader = /* glsl */ `
   uniform float uRibbons;
   uniform vec3 uSecondary;
   uniform vec3 uSurface;
+  uniform float uSignatureFrom;
+  uniform float uSignatureMix;
+  uniform float uSignatureMotion;
+  uniform float uSignatureTo;
   uniform float uTime;
   uniform float uVoice;
   varying vec3 vDirection;
 
   const float PI = 3.14159265359;
+
+  ${sceneSignatureShader}
 
   void main() {
     vec3 direction = normalize(vDirection);
@@ -1706,11 +1717,42 @@ const worldFragmentShader = /* glsl */ `
     vec2 copyDelta = screenUv - copyCenter;
     copyDelta *= mix(vec2(1.05, 1.32), vec2(0.78, 1.7), uPortrait);
     float copyWell = exp(-dot(copyDelta, copyDelta) * 5.8);
+    float sceneStrength = clamp(
+      0.35 + uGlow * 0.7 + uRibbons * 0.25 + uGrid * 0.3 + uVoice * 0.12,
+      0.0,
+      1.4
+    );
+    vec3 sceneMotif = sampleSceneSignature(
+      uSignatureTo,
+      screenUv,
+      uLightFocus,
+      screenAspect,
+      uTime * uSignatureMotion,
+      sceneStrength,
+      uPrimary,
+      uSecondary,
+      uAccent
+    );
+    if (uSignatureMix < 0.999) {
+      vec3 previousMotif = sampleSceneSignature(
+        uSignatureFrom,
+        screenUv,
+        uLightFocus,
+        screenAspect,
+        uTime * uSignatureMotion,
+        sceneStrength,
+        uPrimary,
+        uSecondary,
+        uAccent
+      );
+      sceneMotif = mix(previousMotif, sceneMotif, smoothstep(0.0, 1.0, uSignatureMix));
+    }
     float voiceLift = 1.0 + uVoice * 0.22;
     vec3 color = uSurface * (0.72 + interference * 0.08);
     color += uPrimary * (studioGlow * 0.2 + horizon * 0.13 + ribbon * 0.09) * voiceLift;
     color += uAccent * (studioGlow * 0.08 + ribbon * 0.12 + horizon * 0.035) * voiceLift;
     color += uSecondary * grid * 0.055;
+    color += sceneMotif;
     color += uSecondary * focalPool * (0.026 + uVoice * 0.008);
     color += mix(uPrimary, uAccent, 0.32) * lightShaft * (0.034 + uVoice * 0.01);
     color *= 1.0 - copyWell * uNegativeSpace * 0.54;
@@ -1718,10 +1760,20 @@ const worldFragmentShader = /* glsl */ `
   }
 `;
 
-function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
+function StageEnvironment({
+  cue,
+  motion,
+  reducedMotion,
+}: {
+  cue: CinematicCue;
+  motion: StageMotionBus;
+  reducedMotion: boolean;
+}) {
   const worldMaterialRef = useRef<ShaderMaterial>(null);
   const particleGroupRef = useRef<Group>(null);
   const pointsMaterialRef = useRef<PointsMaterial>(null);
+  const signatureIndex = sceneSignatureIndex(cue.environment.signature);
+  const signatureTargetRef = useRef(signatureIndex);
   const drawingBufferSize = useMemo(() => new Vector2(1, 1), []);
   const paletteTargets = useMemo(() => ({
     accent: new Color(cue.palette.accent),
@@ -1746,6 +1798,10 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
     uRibbons: { value: cue.environment.ribbons },
     uSecondary: { value: new Color(cue.palette.secondary) },
     uSurface: { value: new Color(cue.palette.surface) },
+    uSignatureFrom: { value: signatureIndex },
+    uSignatureMix: { value: 1 },
+    uSignatureMotion: { value: reducedMotion ? 0 : 1 },
+    uSignatureTo: { value: signatureIndex },
     uTime: { value: 0 },
     uVoice: { value: 0 },
   }), []);
@@ -1758,6 +1814,15 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
     }
     return new Float32Array(positions);
   }, []);
+
+  useEffect(() => {
+    if (!worldMaterialRef.current) return;
+    const uniforms = worldMaterialRef.current.uniforms;
+    uniforms.uSignatureFrom.value = signatureTargetRef.current;
+    uniforms.uSignatureTo.value = signatureIndex;
+    uniforms.uSignatureMix.value = 0;
+    signatureTargetRef.current = signatureIndex;
+  }, [signatureIndex]);
 
   useFrame(({ clock, gl, size }, delta) => {
     if (!worldMaterialRef.current || !particleGroupRef.current || !pointsMaterialRef.current) return;
@@ -1784,6 +1849,10 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
     worldMaterialRef.current.uniforms.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
     worldMaterialRef.current.uniforms.uSurface.value.lerp(paletteTargets.surface, paletteAlpha);
     worldMaterialRef.current.uniforms.uTime.value = elapsed;
+    worldMaterialRef.current.uniforms.uSignatureMix.value = reducedMotion
+      ? 1
+      : MathUtils.smoothstep(motion.mediaArrival, 0.04, 0.96);
+    worldMaterialRef.current.uniforms.uSignatureMotion.value = reducedMotion ? 0 : 1;
     gl.getDrawingBufferSize(drawingBufferSize);
     worldMaterialRef.current.uniforms.uResolution.value.copy(drawingBufferSize);
     worldMaterialRef.current.uniforms.uVoice.value = MathUtils.damp(

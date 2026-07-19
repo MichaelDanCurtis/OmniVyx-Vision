@@ -27,4 +27,4 @@ pnpm desktop:build
 
 ## Visual Engine Direction
 
-The current proof is a `LaunchStage` scene with WebGL depth, video-as-stage-object, cinematic motion, dynamic chart summon, and named stage events driven by transcript intent. The native Presenter Kernel is the attachment point for Apple speech recognition, local semantic scoring, and deterministic show arbitration.
+The current proof is a `LaunchStage` scene with WebGL depth, video-as-stage-object, cinematic motion, seven authored transition and settled-scene signatures, dynamic chart summon, and named stage events driven by transcript intent. The native Presenter Kernel is the attachment point for Apple speech recognition, local semantic scoring, and deterministic show arbitration.

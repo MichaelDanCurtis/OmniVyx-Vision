@@ -1,6 +1,7 @@
 import type { StageEventId } from './stageScore';
 import type { MotionPhaseWindow } from './motionEnvelope';
 import type { CuePacingProfile } from './cuePacing';
+import type { SceneSignature } from './sceneSignature';
 
 export type Vector3Tuple = readonly [number, number, number];
 export type Vector2Tuple = readonly [number, number];
@@ -100,6 +101,7 @@ export interface CinematicCue {
     accent: number;
   };
   environment: {
+    signature: SceneSignature;
     glow: number;
     glowPosition: Vector2Tuple;
     horizon: number;
@@ -128,7 +130,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 11;
+  schemaVersion: 12;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -146,7 +148,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 11,
+  schemaVersion: 12,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -230,6 +232,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         accent: 2.6,
       },
       environment: {
+        signature: 'listening_field',
         glow: 0.32,
         glowPosition: [0.24, 0.16],
         horizon: 0.38,
@@ -335,6 +338,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         accent: 3.4,
       },
       environment: {
+        signature: 'aperture_chamber',
         glow: 0.62,
         glowPosition: [0.3, 0.12],
         horizon: 0.52,
@@ -440,6 +444,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         accent: 4.2,
       },
       environment: {
+        signature: 'vector_flow',
         glow: 0.48,
         glowPosition: [-0.08, 0.12],
         horizon: 0.36,
@@ -545,6 +550,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         accent: 3.1,
       },
       environment: {
+        signature: 'living_canopy',
         glow: 0.58,
         glowPosition: [0.36, 0.14],
         horizon: 0.44,
@@ -650,6 +656,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         accent: 4.6,
       },
       environment: {
+        signature: 'evidence_matrix',
         glow: 0.3,
         glowPosition: [0.5, 0.3],
         horizon: 0.24,
@@ -755,6 +762,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         accent: 2.3,
       },
       environment: {
+        signature: 'quiet_vault',
         glow: 0.18,
         glowPosition: [0.08, 0.12],
         horizon: 0.14,
@@ -860,6 +868,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         accent: 3.8,
       },
       environment: {
+        signature: 'final_convergence',
         glow: 0.68,
         glowPosition: [0.26, 0.16],
         horizon: 0.5,

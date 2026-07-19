@@ -6,10 +6,11 @@ import {
   transitionSignatureIndex,
 } from './cinematicScore';
 import { stageEvents } from './stageScore';
+import { sceneSignatureIndex, sceneSignatures } from './sceneSignature';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(11);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(12);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -225,6 +226,17 @@ describe('cinematicScore', () => {
 
     expect(new Set(signatures).size).toBe(signatures.length);
     expect(new Set(indices).size).toBe(indices.length);
+    expect(indices).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it('authors a distinct settled-scene signature for every show beat', () => {
+    const signatures = omniVyxCinematicShow.cueOrder.map(
+      (eventId) => getCinematicCue(eventId).environment.signature,
+    );
+    const indices = signatures.map(sceneSignatureIndex);
+
+    expect(signatures).toEqual(sceneSignatures);
+    expect(new Set(signatures).size).toBe(signatures.length);
     expect(indices).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 

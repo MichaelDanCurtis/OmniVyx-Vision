@@ -7,8 +7,10 @@ import {
   Mesh,
   ShaderMaterial,
   SRGBColorSpace,
+  Vector2,
 } from 'three';
 import type { CinematicCue } from './cinematicScore';
+import { sceneSignatureIndex, sceneSignatureShader } from './sceneSignature';
 
 interface MediaMotionState {
   impact: number;
@@ -26,6 +28,7 @@ interface CinematicMediaPlateProps {
   enabled: boolean;
   motion: MediaMotionState;
   playbackRate: number;
+  reducedMotion: boolean;
 }
 
 const mediaPlateVertexShader = /* glsl */ `
@@ -59,11 +62,16 @@ const mediaPlateFragmentShader = /* glsl */ `
   uniform float uCopyShield;
   uniform float uEnergy;
   uniform float uFlow;
+  uniform vec2 uFocus;
   uniform sampler2D uImage;
   uniform float uImpact;
   uniform float uOpacity;
   uniform vec3 uPrimary;
   uniform vec3 uSecondary;
+  uniform float uSignatureFrom;
+  uniform float uSignatureMix;
+  uniform float uSignatureMotion;
+  uniform float uSignatureTo;
   uniform float uSpectral;
   uniform float uStructure;
   uniform float uTime;
@@ -71,6 +79,8 @@ const mediaPlateFragmentShader = /* glsl */ `
   uniform float uVoice;
   varying float vFold;
   varying vec2 vUv;
+
+  ${sceneSignatureShader}
 
   void main() {
     vec2 uv = vUv;
@@ -120,6 +130,37 @@ const mediaPlateFragmentShader = /* glsl */ `
     color += mix(uPrimary, uSecondary, vUv.y) * membrane * (0.025 + uVoice * 0.012);
     color += uSecondary * structure * (0.035 + uImpact * 0.018);
     color = mix(color, color * (0.86 + spectrum * 0.24), uSpectral * 0.16);
+    float sceneStrength = clamp(
+      0.42 + uFlow * 0.38 + uStructure * 0.3 + uVoice * 0.12,
+      0.0,
+      1.4
+    );
+    vec3 sceneMotif = sampleSceneSignature(
+      uSignatureTo,
+      vUv,
+      uFocus,
+      1.77778,
+      uTime * uSignatureMotion,
+      sceneStrength,
+      uPrimary,
+      uSecondary,
+      uAccent
+    );
+    if (uSignatureMix < 0.999) {
+      vec3 previousMotif = sampleSceneSignature(
+        uSignatureFrom,
+        vUv,
+        uFocus,
+        1.77778,
+        uTime * uSignatureMotion,
+        sceneStrength,
+        uPrimary,
+        uSecondary,
+        uAccent
+      );
+      sceneMotif = mix(previousMotif, sceneMotif, smoothstep(0.0, 1.0, uSignatureMix));
+    }
+    color += sceneMotif;
     float contrast = 0.88 + uClarity * 0.2;
     color = max(vec3(0.0), (color - 0.5) * contrast + 0.5);
 
@@ -143,10 +184,13 @@ export function CinematicMediaPlate({
   enabled,
   motion,
   playbackRate,
+  reducedMotion,
 }: CinematicMediaPlateProps) {
   const meshRef = useRef<Mesh>(null);
   const materialRef = useRef<ShaderMaterial>(null);
   const playbackRateRef = useRef(playbackRate);
+  const signatureIndex = sceneSignatureIndex(cue.environment.signature);
+  const signatureTargetRef = useRef(signatureIndex);
   const texture = useTexture(cue.media.asset);
   const gl = useThree((threeState) => threeState.gl);
   const paletteTargets = useMemo(
@@ -162,12 +206,17 @@ export function CinematicMediaPlate({
     uTime: { value: 0 },
     uEnergy: { value: cue.media.drift },
     uFlow: { value: cue.environment.ribbons },
+    uFocus: { value: new Vector2(...cue.lighting.focus) },
     uImpact: { value: 0 },
     uOpacity: { value: enabled ? cue.media.opacity : 0 },
     uClarity: { value: 1 - Math.min(1, cue.lens.bokehScale / 1.4) },
     uCopyShield: { value: cue.lighting.negativeSpace },
     uSpectral: { value: cue.media.tintStrength },
     uStructure: { value: cue.environment.grid },
+    uSignatureFrom: { value: signatureIndex },
+    uSignatureMix: { value: 1 },
+    uSignatureMotion: { value: reducedMotion ? 0 : 1 },
+    uSignatureTo: { value: signatureIndex },
     uTintStrength: { value: cue.media.tintStrength },
     uPrimary: { value: new Color(cue.palette.primary) },
     uSecondary: { value: new Color(cue.palette.secondary) },
@@ -180,6 +229,15 @@ export function CinematicMediaPlate({
     texture.anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy());
     texture.needsUpdate = true;
   }, [gl, texture]);
+
+  useEffect(() => {
+    if (!materialRef.current) return;
+    const uniforms = materialRef.current.uniforms;
+    uniforms.uSignatureFrom.value = signatureTargetRef.current;
+    uniforms.uSignatureTo.value = signatureIndex;
+    uniforms.uSignatureMix.value = 0;
+    signatureTargetRef.current = signatureIndex;
+  }, [signatureIndex]);
 
   useFrame((_, delta) => {
     if (!meshRef.current || !materialRef.current) return;
@@ -208,6 +266,10 @@ export function CinematicMediaPlate({
       delta,
     );
     materialRef.current.uniforms.uTime.value += delta * playbackRateRef.current;
+    materialRef.current.uniforms.uSignatureMix.value = reducedMotion
+      ? 1
+      : MathUtils.smoothstep(motion.mediaArrival, 0.04, 0.96);
+    materialRef.current.uniforms.uSignatureMotion.value = reducedMotion ? 0 : 1;
     materialRef.current.uniforms.uEnergy.value = MathUtils.damp(
       materialRef.current.uniforms.uEnergy.value,
       cue.media.drift
@@ -247,6 +309,18 @@ export function CinematicMediaPlate({
     materialRef.current.uniforms.uCopyShield.value = MathUtils.damp(
       materialRef.current.uniforms.uCopyShield.value,
       cue.lighting.negativeSpace,
+      damping,
+      delta,
+    );
+    materialRef.current.uniforms.uFocus.value.x = MathUtils.damp(
+      materialRef.current.uniforms.uFocus.value.x,
+      cue.lighting.focus[0],
+      damping,
+      delta,
+    );
+    materialRef.current.uniforms.uFocus.value.y = MathUtils.damp(
+      materialRef.current.uniforms.uFocus.value.y,
+      cue.lighting.focus[1],
       damping,
       delta,
     );
