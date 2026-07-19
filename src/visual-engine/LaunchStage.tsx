@@ -53,7 +53,10 @@ import {
 } from './renderTelemetry';
 import type { StageEventId, StageState } from './stageScore';
 import type { PresenterEnergySignal } from '../domain/presenterAudio';
-import { createOrganicNetworkGeometry } from './organicNetwork';
+import {
+  createOrganicNetworkGeometry,
+  ORGANIC_NETWORK_NODE_COUNT,
+} from './organicNetwork';
 import { resolveCuePace, scaleCueDuration } from './cuePacing';
 import { launchEvidence, normalizeEvidenceValues } from './evidenceScore';
 
@@ -169,6 +172,8 @@ export function LaunchStage({
       data-shot-dolly={cue.camera.shot.positionArc[2].toFixed(2)}
       data-shot-roll={cue.camera.shot.roll.toFixed(3)}
       data-glass-instances={OPTICAL_PANEL_LAYOUT.length}
+      data-organic-nodes={ORGANIC_NETWORK_NODE_COUNT}
+      data-organic-scale={cue.composition.growthScale.toFixed(2)}
       data-evidence-active={state.dynamicChartVisible}
       data-evidence-points={launchEvidence.points.length}
       data-cue-effective-duration={Math.round(scaleCueDuration(cue.transition.durationMs, cuePace))}
@@ -2160,6 +2165,7 @@ const organicLineVertexShader = /* glsl */ `
   uniform float uEnergy;
   uniform float uTime;
   varying float vGrowth;
+  varying float vDepth;
   varying float vSeed;
   varying float vSide;
 
@@ -2169,8 +2175,12 @@ const organicLineVertexShader = /* glsl */ `
     vSide = aSide;
     vec3 animated = position;
     float sway = sin(uTime * 0.31 + aGrowth * 8.0) * 0.018 * (0.35 + uEnergy);
+    float torsion = sin(uTime * 0.19 + aGrowth * 11.0 + aSeed * 6.28318) * 0.012;
     animated.x += sway * aGrowth;
+    animated.y += cos(uTime * 0.17 + aGrowth * 7.0) * 0.006 * aGrowth * uEnergy;
     animated.z += cos(uTime * 0.23 + aGrowth * 6.0) * 0.012 * aGrowth * (0.4 + uEnergy);
+    animated.z += aSide * torsion * (0.35 + aGrowth);
+    vDepth = animated.z;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(animated, 1.0);
   }
 `;
@@ -2184,6 +2194,7 @@ const organicLineFragmentShader = /* glsl */ `
   uniform float uTime;
   uniform float uVoice;
   varying float vGrowth;
+  varying float vDepth;
   varying float vSeed;
   varying float vSide;
 
@@ -2192,11 +2203,21 @@ const organicLineFragmentShader = /* glsl */ `
     float travel = fract(uTime * (0.055 + uVoice * 0.025) + vSeed * 0.16);
     float pulseDistance = min(abs(vGrowth - travel), 1.0 - abs(vGrowth - travel));
     float pulse = exp(-pulseDistance * pulseDistance * 260.0);
-    vec3 color = mix(uPrimary, uAccent, smoothstep(0.18, 0.94, vGrowth));
-    color = mix(color, uSecondary, pulse * (0.68 + uVoice * 0.2));
-    float branchTexture = 0.82 + sin(vSeed * 31.0) * 0.18;
-    float edge = 1.0 - smoothstep(0.58, 1.0, abs(vSide));
-    float alpha = reveal * (0.38 + pulse * 0.72) * branchTexture * edge * uOpacity;
+    float side = abs(vSide);
+    float body = 1.0 - smoothstep(0.7, 1.0, side);
+    float core = 1.0 - smoothstep(0.08, 0.34, side);
+    float rim = smoothstep(0.28, 0.66, side) * (1.0 - smoothstep(0.7, 1.0, side));
+    float striation = pow(sin(vGrowth * 54.0 + vSeed * 24.0 - uTime * 0.12) * 0.5 + 0.5, 3.0);
+    float depthLight = 0.66 + smoothstep(-0.22, 0.3, vDepth) * 0.34;
+    float tip = smoothstep(0.72, 1.0, vGrowth);
+    vec3 color = mix(uPrimary, uAccent, tip * 0.72 + rim * 0.2);
+    color = mix(color, uSecondary, core * 0.32 + pulse * (0.64 + uVoice * 0.18));
+    color += uAccent * striation * 0.08;
+    float alpha = reveal
+      * body
+      * (0.1 + core * 0.42 + rim * 0.16 + striation * 0.08 + pulse * 0.58)
+      * depthLight
+      * uOpacity;
     gl_FragColor = vec4(color, alpha);
   }
 `;
@@ -2205,12 +2226,14 @@ const organicPointVertexShader = /* glsl */ `
   attribute float aGrowth;
   attribute float aSeed;
   attribute float aTerminal;
+  uniform float uEnergy;
   uniform float uReveal;
   uniform float uScale;
   uniform float uTime;
   uniform float uVoice;
   varying float vPulse;
   varying float vReveal;
+  varying float vSeed;
   varying float vTerminal;
 
   void main() {
@@ -2218,9 +2241,14 @@ const organicPointVertexShader = /* glsl */ `
     float travel = fract(uTime * (0.055 + uVoice * 0.025) + aSeed * 0.16);
     float pulseDistance = min(abs(aGrowth - travel), 1.0 - abs(aGrowth - travel));
     vPulse = exp(-pulseDistance * pulseDistance * 240.0);
+    vSeed = aSeed;
     vTerminal = aTerminal;
-    vec4 viewPosition = modelViewMatrix * vec4(position, 1.0);
-    float size = 4.0 + aTerminal * 3.0 + vPulse * 4.8 + uVoice * 3.2;
+    vec3 animated = position;
+    animated.x += sin(uTime * 0.31 + aGrowth * 8.0) * 0.018 * aGrowth * (0.35 + uEnergy);
+    animated.y += cos(uTime * 0.17 + aGrowth * 7.0) * 0.006 * aGrowth * uEnergy;
+    animated.z += cos(uTime * 0.23 + aGrowth * 6.0) * 0.012 * aGrowth * (0.4 + uEnergy);
+    vec4 viewPosition = modelViewMatrix * vec4(animated, 1.0);
+    float size = 4.8 + aTerminal * 8.0 + vPulse * 5.8 + uVoice * 3.8;
     gl_PointSize = size * uScale * (8.5 / max(1.0, -viewPosition.z));
     gl_Position = projectionMatrix * viewPosition;
   }
@@ -2233,15 +2261,28 @@ const organicPointFragmentShader = /* glsl */ `
   uniform vec3 uSecondary;
   varying float vPulse;
   varying float vReveal;
+  varying float vSeed;
   varying float vTerminal;
 
   void main() {
-    float distanceToCenter = length(gl_PointCoord - 0.5);
-    float halo = 1.0 - smoothstep(0.16, 0.5, distanceToCenter);
-    float core = 1.0 - smoothstep(0.0, 0.14, distanceToCenter);
-    vec3 color = mix(uPrimary, uAccent, 0.35 + vTerminal * 0.45);
-    color = mix(color, uSecondary, vPulse * 0.82 + core * 0.18);
-    float alpha = (halo * 0.62 + core * 0.72) * vReveal * uOpacity;
+    vec2 point = gl_PointCoord - 0.5;
+    float angle = vSeed * 6.28318;
+    mat2 rotation = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+    vec2 lensPoint = rotation * point;
+    float distanceToCenter = length(point);
+    float lensDistance = length(vec2(lensPoint.x * 0.82, lensPoint.y * 1.42));
+    float diamondDistance = abs(lensPoint.x) + abs(lensPoint.y);
+    float halo = 1.0 - smoothstep(0.2, 0.5, distanceToCenter);
+    float lens = 1.0 - smoothstep(0.18, 0.44, lensDistance);
+    float ring = smoothstep(0.11, 0.2, lensDistance) * (1.0 - smoothstep(0.28, 0.4, lensDistance));
+    float core = 1.0 - smoothstep(0.04, 0.16, diamondDistance);
+    vec3 color = mix(uPrimary, uAccent, 0.28 + vTerminal * 0.5 + ring * 0.16);
+    color = mix(color, uSecondary, vPulse * 0.72 + core * 0.28);
+    float alpha = (halo * 0.18 + lens * 0.3 + ring * 0.36 + core * 0.82)
+      * vReveal
+      * (0.45 + vTerminal * 0.55)
+      * uOpacity;
+    if (alpha < 0.003) discard;
     gl_FragColor = vec4(color, alpha);
   }
 `;
@@ -2260,16 +2301,17 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
     uOpacity: { value: 0.52 },
     uPrimary: { value: new Color(cue.palette.primary) },
     uReveal: { value: 0 },
-    uScale: { value: 0.03 },
     uSecondary: { value: new Color(cue.palette.secondary) },
     uTime: { value: 0 },
     uVoice: { value: 0 },
   }), []);
   const pointUniforms = useMemo(() => ({
     uAccent: { value: new Color(cue.palette.accent) },
+    uEnergy: { value: cue.motionEnergy },
     uOpacity: { value: 0.92 },
     uPrimary: { value: new Color(cue.palette.primary) },
     uReveal: { value: 0 },
+    uScale: { value: 0.03 },
     uSecondary: { value: new Color(cue.palette.secondary) },
     uTime: { value: 0 },
     uVoice: { value: 0 },
@@ -2306,26 +2348,30 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
     lineMaterialRef.current.uniforms.uVoice.value = voice;
     lineMaterialRef.current.uniforms.uEnergy.value = cue.motionEnergy + voice * 0.32;
     lineMaterialRef.current.uniforms.uReveal.value = motion.actorArrival;
-    lineMaterialRef.current.uniforms.uOpacity.value = MathUtils.damp(
+    const lineOpacity = MathUtils.damp(
       lineMaterialRef.current.uniforms.uOpacity.value,
       (0.56 + motion.impact * 0.12 + voice * 0.16) * actorPresence,
       damping,
       delta,
     );
+    lineMaterialRef.current.uniforms.uOpacity.value = lineOpacity;
     pointsMaterialRef.current.uniforms.uPrimary.value.lerp(targetPrimary, paletteAlpha);
     pointsMaterialRef.current.uniforms.uSecondary.value.lerp(targetSecondary, paletteAlpha);
     pointsMaterialRef.current.uniforms.uAccent.value.lerp(targetAccent, paletteAlpha);
     pointsMaterialRef.current.uniforms.uTime.value = elapsed;
     pointsMaterialRef.current.uniforms.uVoice.value = voice;
+    pointsMaterialRef.current.uniforms.uEnergy.value = cue.motionEnergy + voice * 0.32;
     pointsMaterialRef.current.uniforms.uReveal.value = motion.actorArrival;
     const pointScaleUniform = pointsMaterialRef.current.uniforms.uScale;
     if (pointScaleUniform) pointScaleUniform.value = scale;
-    pointsMaterialRef.current.uniforms.uOpacity.value = MathUtils.damp(
+    const pointOpacity = MathUtils.damp(
       pointsMaterialRef.current.uniforms.uOpacity.value,
       (0.86 + motion.impact * 0.08 + voice * 0.1) * actorPresence,
       damping,
       delta,
     );
+    pointsMaterialRef.current.uniforms.uOpacity.value = pointOpacity;
+    groupRef.current.visible = scale > 0.075 && Math.max(lineOpacity, pointOpacity) > 0.004;
   });
 
   return (

@@ -23,6 +23,8 @@ describe('organicNetwork', () => {
     expect(first.nodeGrowth).toHaveLength(ORGANIC_NETWORK_NODE_COUNT);
     expect(first.nodeSeeds).toHaveLength(ORGANIC_NETWORK_NODE_COUNT);
     expect(first.nodeTerminal).toHaveLength(ORGANIC_NETWORK_NODE_COUNT);
+    expect(ORGANIC_NETWORK_NODE_COUNT).toBeGreaterThan(50);
+    expect(ORGANIC_NETWORK_EDGE_COUNT).toBe(ORGANIC_NETWORK_NODE_COUNT - 1);
     expect([...first.edgePositions]).toEqual([...second.edgePositions]);
   });
 
@@ -36,6 +38,11 @@ describe('organicNetwork', () => {
     }
     expect([...geometry.edgeGrowth].every((value) => value >= 0 && value <= 1)).toBe(true);
     expect([...geometry.nodeTerminal].filter((value) => value === 1).length).toBeGreaterThan(10);
+    const nodeDepths = Array.from(
+      { length: geometry.nodePositions.length / 3 },
+      (_, index) => geometry.nodePositions[index * 3 + 2],
+    );
+    expect(Math.max(...nodeDepths) - Math.min(...nodeDepths)).toBeGreaterThan(0.3);
     expect([
       ...geometry.edgePositions,
       ...geometry.edgeGrowth,

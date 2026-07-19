@@ -16,7 +16,7 @@ export interface OrganicNetworkGeometry {
   nodeTerminal: Float32Array;
 }
 
-const nodes = [
+const baseNodes = [
   { parent: null, position: [0, -0.2, 0] },
   { parent: 0, position: [0.02, 0.1, 0.01] },
   { parent: 1, position: [-0.06, 0.42, 0.03] },
@@ -51,6 +51,49 @@ const nodes = [
   { parent: 30, position: [-0.62, 2.25, 0.03] },
   { parent: 30, position: [-0.15, 2.42, 0.12] },
 ] as const satisfies readonly OrganicNode[];
+
+function buildOrganicNodes(base: readonly OrganicNode[]): readonly OrganicNode[] {
+  const expanded: OrganicNode[] = base.map((node) => ({
+    parent: node.parent,
+    position: [node.position[0], node.position[1], node.position[2]],
+  }));
+  const parentIndexes = new Set<number>(
+    base.flatMap((node) => node.parent === null ? [] : [node.parent]),
+  );
+
+  base.forEach((node, nodeIndex) => {
+    if (node.parent === null || parentIndexes.has(nodeIndex)) return;
+    const parent = base[node.parent];
+    const deltaX = node.position[0] - parent.position[0];
+    const deltaY = node.position[1] - parent.position[1];
+    const deltaZ = node.position[2] - parent.position[2];
+    const tangentLength = Math.max(0.001, Math.hypot(deltaX, deltaY));
+    const tangentX = deltaX / tangentLength;
+    const normalX = -deltaY / tangentLength;
+    const seed = (nodeIndex * 0.61803398875) % 1;
+
+    for (let fork = 0; fork < 2; fork += 1) {
+      const forkDirection = fork === 0 ? -1 : 1;
+      const extension = 0.16 + seed * 0.075 + fork * 0.025;
+      const lateral = forkDirection * (0.09 + ((nodeIndex + fork) % 3) * 0.028);
+      expanded.push({
+        parent: nodeIndex,
+        position: [
+          node.position[0] + tangentX * extension + normalX * lateral,
+          node.position[1] + 0.14 + Math.abs(deltaY) * 0.16 + fork * 0.035,
+          node.position[2]
+            + deltaZ * 0.32
+            + forkDirection * (0.075 + seed * 0.06)
+            + Math.sin(nodeIndex * 1.17 + fork) * 0.035,
+        ],
+      });
+    }
+  });
+
+  return expanded;
+}
+
+const nodes = buildOrganicNodes(baseNodes);
 
 export const ORGANIC_NETWORK_NODE_COUNT = nodes.length;
 export const ORGANIC_NETWORK_EDGE_COUNT = nodes.length - 1;
@@ -98,11 +141,11 @@ export function createOrganicNetworkGeometry(): OrganicNetworkGeometry {
     const length = Math.max(0.001, Math.hypot(deltaX, deltaY));
     const edgeIndex = nodeIndex - 1;
     const direction = edgeIndex % 2 === 0 ? 1 : -1;
-    const bend = (0.05 + (edgeIndex % 4) * 0.014) * direction;
+    const bend = (0.06 + (edgeIndex % 4) * 0.017) * direction;
     const control: Position3 = [
       (parent.position[0] + node.position[0]) * 0.5 - (deltaY / length) * bend,
       (parent.position[1] + node.position[1]) * 0.5 + (deltaX / length) * bend,
-      (parent.position[2] + node.position[2]) * 0.5 + Math.sin(edgeIndex * 1.73) * 0.085,
+      (parent.position[2] + node.position[2]) * 0.5 + Math.sin(edgeIndex * 1.73) * 0.14,
     ];
     const parentGrowth = growthForY(parent.position[1]);
     const childGrowth = growthForY(node.position[1]);
@@ -120,8 +163,8 @@ export function createOrganicNetworkGeometry(): OrganicNetworkGeometry {
       const tangentLength = Math.max(0.001, Math.hypot(tangentX, tangentY));
       const normalX = -tangentY / tangentLength;
       const normalY = tangentX / tangentLength;
-      const startWidth = 0.019 - startGrowth * 0.008;
-      const endWidth = 0.019 - endGrowth * 0.008;
+      const startWidth = 0.033 - startGrowth * 0.014;
+      const endWidth = 0.033 - endGrowth * 0.014;
       const startLeft: Position3 = [
         start[0] + normalX * startWidth,
         start[1] + normalY * startWidth,
