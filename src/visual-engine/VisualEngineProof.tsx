@@ -25,6 +25,7 @@ export function VisualEngineProof() {
   const [listening, setListening] = useState(false);
   const [recognition, setRecognition] = useState<SpeechRecognitionLike | null>(null);
   const [presenting, setPresenting] = useState(false);
+  const [presenterPulse, setPresenterPulse] = useState(0);
   const canUseMic = typeof window !== 'undefined' && getSpeechRecognition() !== null;
 
   useEffect(() => {
@@ -37,6 +38,7 @@ export function VisualEngineProof() {
 
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();
+      setPresenterPulse((current) => current + 1);
       setStageState((current) => {
         const order = omniVyxCinematicShow.cueOrder;
         const currentIndex = order.indexOf(current.activeEvent);
@@ -50,6 +52,7 @@ export function VisualEngineProof() {
   }, [presenting]);
 
   function handleEvent(eventId: StageEventId) {
+    setPresenterPulse((current) => current + 1);
     setStageState((current) => applyStageEvent(current, eventId));
   }
 
@@ -63,6 +66,7 @@ export function VisualEngineProof() {
 
     const intent = findStageIntent(trimmed, stageState.activeEvent, stageState.previousEvent);
     const occurredAtMs = Date.now();
+    setPresenterPulse((current) => current + 1);
     void acceptPresenterSignal({
       signalId: createSignalId(),
       showId: 'omnivyx-launch-proof',
@@ -117,6 +121,7 @@ export function VisualEngineProof() {
     <section className={presenting ? 'visual-engine-proof presenting' : 'visual-engine-proof'}>
       <div className="visual-engine-layout">
         <LaunchStage
+          presenterPulse={presenterPulse}
           presenting={presenting}
           state={stageState}
           onTogglePresenting={() => setPresenting((current) => !current)}

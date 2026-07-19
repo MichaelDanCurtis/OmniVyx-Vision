@@ -808,7 +808,7 @@ textarea::placeholder {
   bottom: clamp(24px, 5vw, 58px);
   width: min(520px, calc(100% - 48px));
   text-shadow: 0 20px 50px rgba(0, 0, 0, 0.56);
-  animation: stageCopyEnter 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: stageCopyEnter var(--cue-copy-duration, 720ms) cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: opacity, transform;
 }
 
@@ -973,8 +973,8 @@ textarea::placeholder {
   opacity: 0;
   transform: translate3d(18px, -8px, 0) scale(0.96);
   transition:
-    opacity 260ms ease,
-    transform 260ms ease;
+    opacity var(--cue-panel-duration, 320ms) ease,
+    transform var(--cue-panel-duration, 320ms) cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .stage-dynamic-panel.visible {

@@ -1,0 +1,41 @@
+export interface CueMotionSample {
+  progress: number;
+  arrival: number;
+  impact: number;
+  overshoot: number;
+}
+
+export function sampleCueMotion(
+  elapsedMs: number,
+  durationMs: number,
+  target: CueMotionSample = { progress: 0, arrival: 0, impact: 1, overshoot: 0 },
+): CueMotionSample {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+    throw new Error('Cue elapsed time must be a non-negative finite number.');
+  }
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    throw new Error('Cue duration must be a positive finite number.');
+  }
+
+  const progress = Math.min(1, elapsedMs / durationMs);
+  target.progress = progress;
+  target.arrival = 1 - Math.pow(1 - progress, 4);
+  target.impact = Math.exp(-progress * 6) * (1 - progress);
+  target.overshoot = Math.sin(progress * Math.PI) * Math.exp(-progress * 2.4);
+  return target;
+}
+
+export function decayImpulse(value: number, deltaSeconds: number, lambda = 5): number {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error('Impulse must be a non-negative finite number.');
+  }
+  if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
+    throw new Error('Delta time must be a non-negative finite number.');
+  }
+  if (!Number.isFinite(lambda) || lambda <= 0) {
+    throw new Error('Impulse damping must be a positive finite number.');
+  }
+
+  const next = value * Math.exp(-lambda * deltaSeconds);
+  return next < 0.0001 ? 0 : next;
+}

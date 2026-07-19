@@ -22,16 +22,32 @@ import {
   Vector3,
 } from 'three';
 import { getCinematicCue, type CinematicCue } from './cinematicScore';
+import {
+  decayImpulse,
+  sampleCueMotion,
+  type CueMotionSample,
+} from './motionEnvelope';
 import { VideoLayer } from './VideoLayer';
 import type { StageEventId, StageState } from './stageScore';
 
+interface StageMotionBus extends CueMotionSample {
+  elapsedMs: number;
+  voiceImpulse: number;
+}
+
 interface LaunchStageProps {
+  presenterPulse?: number;
   presenting?: boolean;
   state: StageState;
   onTogglePresenting?: () => void;
 }
 
-export function LaunchStage({ onTogglePresenting, presenting = false, state }: LaunchStageProps) {
+export function LaunchStage({
+  onTogglePresenting,
+  presenterPulse = 0,
+  presenting = false,
+  state,
+}: LaunchStageProps) {
   const cue = getCinematicCue(state.activeEvent);
   const [performanceProfile, setPerformanceProfile] = useState({
     factor: state.quality === 'high' ? 0.72 : 0,
@@ -56,9 +72,12 @@ export function LaunchStage({ onTogglePresenting, presenting = false, state }: L
       data-quality={state.quality}
       data-render-scale={adaptiveDpr.toFixed(2)}
       data-fps={performanceProfile.fps}
+      data-presenter-pulse={presenterPulse}
       style={{
         '--stage-primary': cue.palette.primary,
         '--stage-accent': cue.palette.accent,
+        '--cue-copy-duration': `${clamp(cue.transition.durationMs * 0.52, 420, 900)}ms`,
+        '--cue-panel-duration': `${clamp(cue.transition.durationMs * 0.34, 260, 520)}ms`,
       } as CSSProperties}
     >
       <Canvas
@@ -88,7 +107,12 @@ export function LaunchStage({ onTogglePresenting, presenting = false, state }: L
         >
           <AdaptiveDpr />
           <TransitionPerformanceRegressor eventId={state.activeEvent} />
-          <LaunchScene cue={cue} effectsEnabled={effectsEnabled} state={state} />
+          <LaunchScene
+            cue={cue}
+            effectsEnabled={effectsEnabled}
+            presenterPulse={presenterPulse}
+            state={state}
+          />
         </PerformanceMonitor>
       </Canvas>
 
@@ -139,21 +163,37 @@ export function LaunchStage({ onTogglePresenting, presenting = false, state }: L
 interface LaunchSceneProps {
   cue: CinematicCue;
   effectsEnabled: boolean;
+  presenterPulse: number;
   state: StageState;
 }
 
-function LaunchScene({ cue, effectsEnabled, state }: LaunchSceneProps) {
+function LaunchScene({ cue, effectsEnabled, presenterPulse, state }: LaunchSceneProps) {
+  const motion = useMemo<StageMotionBus>(() => ({
+    elapsedMs: 0,
+    progress: 0,
+    arrival: 0,
+    impact: 1,
+    overshoot: 0,
+    voiceImpulse: 0,
+  }), []);
+
   return (
     <>
       <color attach="background" args={['#03060d']} />
       <fog attach="fog" args={['#050914', 6.8, 17]} />
       <ambientLight intensity={0.45} />
-      <CinematicLighting cue={cue} />
+      <MotionDirector
+        cue={cue}
+        eventId={state.activeEvent}
+        motion={motion}
+        presenterPulse={presenterPulse}
+      />
+      <CinematicLighting cue={cue} motion={motion} />
 
-      <CameraRig cue={cue} />
-      <StageEnvironment cue={cue} />
-      <SilkField cue={cue} />
-      <SilkField cue={cue} foreground />
+      <CameraRig cue={cue} motion={motion} />
+      <StageEnvironment cue={cue} motion={motion} />
+      <SilkField cue={cue} motion={motion} />
+      <SilkField cue={cue} foreground motion={motion} />
       {cue.composition.primaryVideoOpacity > 0 ? (
         <VideoLayer
           src="/engine/launch-loop.webm"
@@ -178,11 +218,11 @@ function LaunchScene({ cue, effectsEnabled, state }: LaunchSceneProps) {
           scale={[0.72, 1.18, 1]}
         />
       ) : null}
-      <OpticalPanel cue={cue} index={0} position={[-2.9, 0.5, -1.2]} rotation={[0.08, 0.42, -0.08]} />
-      <OpticalPanel cue={cue} index={1} position={[2.7, 0.85, -1.7]} rotation={[0.02, -0.42, 0.08]} />
-      <OpticalPanel cue={cue} index={2} position={[0.45, -1.15, -0.65]} rotation={[-0.12, -0.14, 0.02]} />
-      <HeroMonolith cue={cue} />
-      <NetworkBloom cue={cue} />
+      <OpticalPanel cue={cue} index={0} motion={motion} position={[-2.9, 0.5, -1.2]} rotation={[0.08, 0.42, -0.08]} />
+      <OpticalPanel cue={cue} index={1} motion={motion} position={[2.7, 0.85, -1.7]} rotation={[0.02, -0.42, 0.08]} />
+      <OpticalPanel cue={cue} index={2} motion={motion} position={[0.45, -1.15, -0.65]} rotation={[-0.12, -0.14, 0.02]} />
+      <HeroMonolith cue={cue} motion={motion} />
+      <NetworkBloom cue={cue} motion={motion} />
 
       {effectsEnabled ? (
         <EffectComposer>
@@ -195,6 +235,38 @@ function LaunchScene({ cue, effectsEnabled, state }: LaunchSceneProps) {
   );
 }
 
+function MotionDirector({
+  cue,
+  eventId,
+  motion,
+  presenterPulse,
+}: {
+  cue: CinematicCue;
+  eventId: StageEventId;
+  motion: StageMotionBus;
+  presenterPulse: number;
+}) {
+  useEffect(() => {
+    motion.elapsedMs = 0;
+    motion.progress = 0;
+    motion.arrival = 0;
+    motion.impact = 1;
+    motion.overshoot = 0;
+  }, [eventId, motion]);
+
+  useEffect(() => {
+    if (presenterPulse > 0) motion.voiceImpulse = 1;
+  }, [motion, presenterPulse]);
+
+  useFrame((_, delta) => {
+    sampleCueMotion(motion.elapsedMs, cue.transition.durationMs, motion);
+    motion.elapsedMs += delta * 1_000;
+    motion.voiceImpulse = decayImpulse(motion.voiceImpulse, delta, 4.8);
+  });
+
+  return null;
+}
+
 function TransitionPerformanceRegressor({ eventId }: { eventId: StageEventId }) {
   const regress = useThree((threeState) => threeState.performance.regress);
 
@@ -205,7 +277,7 @@ function TransitionPerformanceRegressor({ eventId }: { eventId: StageEventId }) 
   return null;
 }
 
-function CinematicLighting({ cue }: { cue: CinematicCue }) {
+function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
   const keyRef = useRef<DirectionalLight>(null);
   const rimRef = useRef<PointLight>(null);
   const accentRef = useRef<PointLight>(null);
@@ -220,15 +292,30 @@ function CinematicLighting({ cue }: { cue: CinematicCue }) {
     rimTarget.set(cue.palette.primary);
     accentTarget.set(cue.palette.accent);
     if (keyRef.current) {
-      keyRef.current.intensity = MathUtils.damp(keyRef.current.intensity, cue.lighting.key, damping, delta);
+      keyRef.current.intensity = MathUtils.damp(
+        keyRef.current.intensity,
+        cue.lighting.key + motion.impact * 0.28,
+        damping,
+        delta,
+      );
       keyRef.current.color.lerp(keyTarget, paletteAlpha);
     }
     if (rimRef.current) {
-      rimRef.current.intensity = MathUtils.damp(rimRef.current.intensity, cue.lighting.rim, damping, delta);
+      rimRef.current.intensity = MathUtils.damp(
+        rimRef.current.intensity,
+        cue.lighting.rim + motion.impact * 1.1 + motion.voiceImpulse * 0.65,
+        damping,
+        delta,
+      );
       rimRef.current.color.lerp(rimTarget, paletteAlpha);
     }
     if (accentRef.current) {
-      accentRef.current.intensity = MathUtils.damp(accentRef.current.intensity, cue.lighting.accent, damping, delta);
+      accentRef.current.intensity = MathUtils.damp(
+        accentRef.current.intensity,
+        cue.lighting.accent + motion.impact * 1.45 + motion.voiceImpulse * 0.72,
+        damping,
+        delta,
+      );
       accentRef.current.color.lerp(accentTarget, paletteAlpha);
     }
   });
@@ -242,7 +329,7 @@ function CinematicLighting({ cue }: { cue: CinematicCue }) {
   );
 }
 
-function CameraRig({ cue }: { cue: CinematicCue }) {
+function CameraRig({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
   const camera = useThree((threeState) => threeState.camera) as PerspectiveCamera;
   const target = useMemo(() => new Vector3(0, 0.05, 0), []);
 
@@ -250,9 +337,28 @@ function CameraRig({ cue }: { cue: CinematicCue }) {
     const elapsed = clock.getElapsedTime();
     const damping = cue.transition.damping;
     const drift = cue.motionEnergy;
-    camera.position.x = MathUtils.damp(camera.position.x, cue.camera.position[0] + Math.sin(elapsed * 0.22) * 0.1 * drift, damping, delta);
-    camera.position.y = MathUtils.damp(camera.position.y, cue.camera.position[1] + Math.sin(elapsed * 0.16) * 0.05 * drift, damping, delta);
-    camera.position.z = MathUtils.damp(camera.position.z, cue.camera.position[2], damping, delta);
+    camera.position.x = MathUtils.damp(
+      camera.position.x,
+      cue.camera.position[0]
+        + Math.sin(elapsed * 0.22) * 0.1 * drift
+        + motion.overshoot * 0.14 * drift,
+      damping,
+      delta,
+    );
+    camera.position.y = MathUtils.damp(
+      camera.position.y,
+      cue.camera.position[1]
+        + Math.sin(elapsed * 0.16) * 0.05 * drift
+        + motion.voiceImpulse * 0.018,
+      damping,
+      delta,
+    );
+    camera.position.z = MathUtils.damp(
+      camera.position.z,
+      cue.camera.position[2] + motion.impact * 0.18,
+      damping,
+      delta,
+    );
     target.x = MathUtils.damp(target.x, cue.camera.target[0], damping, delta);
     target.y = MathUtils.damp(target.y, cue.camera.target[1], damping, delta);
     target.z = MathUtils.damp(target.z, cue.camera.target[2], damping, delta);
@@ -271,7 +377,11 @@ function roundToStep(value: number, step: number): number {
   return Math.round(value / step) * step;
 }
 
-function StageEnvironment({ cue }: { cue: CinematicCue }) {
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
   const pointsMaterialRef = useRef<PointsMaterial>(null);
   const targetColor = useMemo(() => new Color(cue.palette.primary), []);
   const particles = useMemo(() => {
@@ -290,6 +400,18 @@ function StageEnvironment({ cue }: { cue: CinematicCue }) {
     pointsMaterialRef.current.color.lerp(
       targetColor,
       1 - Math.exp(-cue.transition.damping * delta),
+    );
+    pointsMaterialRef.current.opacity = MathUtils.damp(
+      pointsMaterialRef.current.opacity,
+      0.3 + motion.impact * 0.16 + motion.voiceImpulse * 0.1,
+      cue.transition.damping,
+      delta,
+    );
+    pointsMaterialRef.current.size = MathUtils.damp(
+      pointsMaterialRef.current.size,
+      0.018 + motion.voiceImpulse * 0.006,
+      cue.transition.damping,
+      delta,
     );
   });
 
@@ -378,7 +500,15 @@ const silkFragmentShader = /* glsl */ `
   }
 `;
 
-function SilkField({ cue, foreground = false }: { cue: CinematicCue; foreground?: boolean }) {
+function SilkField({
+  cue,
+  foreground = false,
+  motion,
+}: {
+  cue: CinematicCue;
+  foreground?: boolean;
+  motion: StageMotionBus;
+}) {
   const meshRef = useRef<Mesh>(null);
   const materialRef = useRef<ShaderMaterial>(null);
   const paletteTargets = useMemo(
@@ -413,15 +543,17 @@ function SilkField({ cue, foreground = false }: { cue: CinematicCue; foreground?
     materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
     materialRef.current.uniforms.uEnergy.value = MathUtils.damp(
       materialRef.current.uniforms.uEnergy.value,
-      cue.motionEnergy,
+      cue.motionEnergy + motion.impact * 0.42 + motion.voiceImpulse * 0.3,
       cue.transition.damping,
       delta,
     );
     materialRef.current.uniforms.uOpacity.value = MathUtils.damp(
       materialRef.current.uniforms.uOpacity.value,
-      cue.composition.chartScale > 0.5
+      (cue.composition.chartScale > 0.5
         ? (foreground ? 0.38 : 0.72)
-        : (foreground ? 0.88 : 1.08),
+        : (foreground ? 0.88 : 1.08))
+        + motion.voiceImpulse * 0.06
+        + motion.impact * 0.05,
       cue.transition.damping,
       delta,
     );
@@ -431,7 +563,9 @@ function SilkField({ cue, foreground = false }: { cue: CinematicCue; foreground?
     materialRef.current.uniforms.uSurface.value.lerp(paletteTargets.surface, paletteAlpha);
     meshRef.current.position.y = MathUtils.damp(
       meshRef.current.position.y,
-      (foreground ? 0.72 : 0.05) + cue.composition.ribbonLift * (foreground ? 0.72 : 0.18),
+      (foreground ? 0.72 : 0.05)
+        + cue.composition.ribbonLift * (foreground ? 0.72 : 0.18)
+        + motion.overshoot * (foreground ? 0.16 : 0.05),
       cue.transition.damping,
       delta,
     );
@@ -499,11 +633,12 @@ const opticalPanelFragmentShader = /* glsl */ `
 interface OpticalPanelProps {
   cue: CinematicCue;
   index: number;
+  motion: StageMotionBus;
   position: [number, number, number];
   rotation: [number, number, number];
 }
 
-function OpticalPanel({ cue, index, position, rotation }: OpticalPanelProps) {
+function OpticalPanel({ cue, index, motion, position, rotation }: OpticalPanelProps) {
   const paneRef = useRef<Mesh>(null);
   const materialRef = useRef<ShaderMaterial>(null);
   const paletteTargets = useMemo(
@@ -534,19 +669,23 @@ function OpticalPanel({ cue, index, position, rotation }: OpticalPanelProps) {
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     paneRef.current.position.x = MathUtils.damp(
       paneRef.current.position.x,
-      position[0] * cue.composition.glassSpread,
+      position[0] * cue.composition.glassSpread + (index - 1) * motion.impact * 0.22,
       damping,
       delta,
     );
     paneRef.current.position.y = MathUtils.damp(
       paneRef.current.position.y,
-      position[1] + Math.sin(elapsed * 0.48) * 0.14 * energy,
+      position[1]
+        + Math.sin(elapsed * 0.48) * 0.14 * energy
+        + motion.overshoot * (index === 1 ? 0.1 : -0.07),
       damping,
       delta,
     );
     paneRef.current.rotation.y = MathUtils.damp(
       paneRef.current.rotation.y,
-      rotation[1] + Math.sin(elapsed * 0.32) * 0.07 * energy,
+      rotation[1]
+        + Math.sin(elapsed * 0.32) * 0.07 * energy
+        + (index - 1) * motion.impact * 0.1,
       damping,
       delta,
     );
@@ -562,7 +701,7 @@ function OpticalPanel({ cue, index, position, rotation }: OpticalPanelProps) {
     materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
     materialRef.current.uniforms.uOpacity.value = MathUtils.damp(
       materialRef.current.uniforms.uOpacity.value,
-      0.52 + energy * 0.12,
+      0.52 + energy * 0.12 + motion.impact * 0.1 + motion.voiceImpulse * 0.08,
       damping,
       delta,
     );
@@ -588,7 +727,7 @@ function OpticalPanel({ cue, index, position, rotation }: OpticalPanelProps) {
   );
 }
 
-function HeroMonolith({ cue }: { cue: CinematicCue }) {
+function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
   const groupRef = useRef<Group>(null);
   const outerMaterialRef = useRef<MeshPhysicalMaterial>(null);
   const faceMaterialRef = useRef<MeshPhysicalMaterial>(null);
@@ -619,7 +758,7 @@ function HeroMonolith({ cue }: { cue: CinematicCue }) {
     );
     groupRef.current.position.y = MathUtils.damp(
       groupRef.current.position.y,
-      cue.composition.heroY,
+      cue.composition.heroY + motion.overshoot * 0.1 + motion.voiceImpulse * 0.025,
       damping,
       delta,
     );
@@ -631,7 +770,7 @@ function HeroMonolith({ cue }: { cue: CinematicCue }) {
     );
     groupRef.current.rotation.x = MathUtils.damp(
       groupRef.current.rotation.x,
-      -0.04 + (cue.composition.coreScale - 0.9) * 0.08,
+      -0.04 + (cue.composition.coreScale - 0.9) * 0.08 + motion.impact * 0.055,
       damping,
       delta,
     );
@@ -643,7 +782,7 @@ function HeroMonolith({ cue }: { cue: CinematicCue }) {
     );
     const scale = MathUtils.damp(
       groupRef.current.scale.x,
-      cue.composition.coreScale,
+      cue.composition.coreScale * (1 + motion.overshoot * 0.08 + motion.voiceImpulse * 0.035),
       damping,
       delta,
     );
@@ -664,7 +803,7 @@ function HeroMonolith({ cue }: { cue: CinematicCue }) {
     if (glassMaterialRef.current) {
       glassMaterialRef.current.opacity = MathUtils.damp(
         glassMaterialRef.current.opacity,
-        0.12 + cue.motionEnergy * 0.035,
+        0.12 + cue.motionEnergy * 0.035 + motion.voiceImpulse * 0.025,
         damping,
         delta,
       );
@@ -672,7 +811,18 @@ function HeroMonolith({ cue }: { cue: CinematicCue }) {
     if (apertureMaterialRef.current) {
       apertureMaterialRef.current.opacity = MathUtils.damp(
         apertureMaterialRef.current.opacity,
-        0.42 + cue.motionEnergy * 0.12,
+        0.42
+          + cue.motionEnergy * 0.12
+          + motion.impact * 0.18
+          + motion.voiceImpulse * 0.1,
+        damping,
+        delta,
+      );
+    }
+    if (prismMaterialRef.current) {
+      prismMaterialRef.current.emissiveIntensity = MathUtils.damp(
+        prismMaterialRef.current.emissiveIntensity,
+        0.16 + motion.impact * 0.72 + motion.voiceImpulse * 0.46,
         damping,
         delta,
       );
@@ -772,7 +922,7 @@ const networkEdges = [
   [4, 5], [4, 6], [4, 8], [5, 7], [6, 7], [6, 8], [8, 9],
 ] as const;
 
-function NetworkBloom({ cue }: { cue: CinematicCue }) {
+function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
   const groupRef = useRef<Group>(null);
   const lineMaterialRef = useRef<LineBasicMaterial>(null);
   const pointsMaterialRef = useRef<PointsMaterial>(null);
@@ -796,7 +946,7 @@ function NetworkBloom({ cue }: { cue: CinematicCue }) {
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     const scale = MathUtils.damp(
       groupRef.current.scale.x,
-      cue.composition.growthScale,
+      cue.composition.growthScale * (1 + motion.overshoot * 0.07 + motion.voiceImpulse * 0.025),
       damping,
       delta,
     );
@@ -806,6 +956,22 @@ function NetworkBloom({ cue }: { cue: CinematicCue }) {
     targetAccent.set(cue.palette.accent);
     lineMaterialRef.current?.color.lerp(targetPrimary, paletteAlpha);
     pointsMaterialRef.current?.color.lerp(targetAccent, paletteAlpha);
+    if (lineMaterialRef.current) {
+      lineMaterialRef.current.opacity = MathUtils.damp(
+        lineMaterialRef.current.opacity,
+        0.54 + motion.impact * 0.14 + motion.voiceImpulse * 0.08,
+        damping,
+        delta,
+      );
+    }
+    if (pointsMaterialRef.current) {
+      pointsMaterialRef.current.size = MathUtils.damp(
+        pointsMaterialRef.current.size,
+        0.085 + motion.impact * 0.016 + motion.voiceImpulse * 0.024,
+        damping,
+        delta,
+      );
+    }
   });
 
   return (

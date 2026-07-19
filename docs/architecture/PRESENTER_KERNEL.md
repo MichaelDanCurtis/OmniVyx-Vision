@@ -56,6 +56,8 @@ Stage components consume those targets with frame-rate-independent exponential d
 
 The visual grammar is cue-directed rather than globally decorative. Each cue authors a palette plus hero position, scale, and yaw. Product, network, and dynamic-data moments enforce a single dominant actor so supporting geometry yields instead of accumulating. The current premium material set consists of a layered optical monolith, shader-based liquid-glass panels, palette-driven procedural cloth, and a two-draw-call network bloom.
 
+Semantic transitions and presenter energy are separate control channels. An accepted intent changes the deterministic stage event, while every accepted presenter utterance may also emit a bounded transient pulse that affects camera, lighting, cloth, glass, and hero motion without mutating the active event. Cue arrival, impact, and overshoot values plus the presenter pulse live on one stable mutable motion bus, keeping choreography synchronized without React state updates or render-loop allocations.
+
 ## Render Quality Contract
 
 High quality is adaptive rather than a fixed pixel ratio. The stage measures sustained frame performance, selects a bounded device pixel ratio, and temporarily regresses resolution during scored transitions. The manual low-quality gate remains available as a deterministic fallback and disables post-processing.
