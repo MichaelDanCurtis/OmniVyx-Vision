@@ -79,6 +79,8 @@ interface StageMotionBus extends CueMotionSample {
   handoff: number;
   impactScale: number;
   mediaArrival: number;
+  voiceCadence: number;
+  voiceEmphasis: number;
   voiceImpulse: number;
   voiceLevel: number;
   voicePeak: number;
@@ -578,6 +580,8 @@ function LaunchScene({
     arrival: 0,
     impact: 1,
     overshoot: 0,
+    voiceCadence: 0,
+    voiceEmphasis: 0,
     voiceImpulse: 0,
     voiceLevel: 0,
     voicePeak: 0,
@@ -654,7 +658,9 @@ function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotion
       cue.lens.bloom
         + motion.impact * 0.05
         + motion.voiceLevel * 0.16
-        + motion.voicePeak * 0.08,
+        + motion.voicePeak * 0.08
+        + motion.voiceEmphasis * 0.12
+        + motion.voiceCadence * 0.035,
       damping,
       delta,
     );
@@ -663,13 +669,16 @@ function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotion
         depthOfFieldRef.current.bokehScale,
         cue.lens.bokehScale
           + motion.impact * 0.18
-          + motion.voicePeak * 0.08,
+          + motion.voicePeak * 0.08
+          + motion.voiceEmphasis * 0.06,
         damping,
         delta,
       );
       depthOfFieldRef.current.cocMaterial.focusDistance = MathUtils.damp(
         depthOfFieldRef.current.cocMaterial.focusDistance,
-        cue.lens.focusDistance - motion.voiceLevel * 0.04,
+        cue.lens.focusDistance
+          - motion.voiceLevel * 0.04
+          - motion.voiceEmphasis * 0.018,
         damping,
         delta,
       );
@@ -699,7 +708,8 @@ function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotion
       cue.lens.exposure
         + motion.impact * 0.05
         + motion.voiceLevel * 0.035
-        + motion.voicePeak * 0.02,
+        + motion.voicePeak * 0.02
+        + motion.voiceEmphasis * 0.035,
       damping,
       delta,
     );
@@ -741,6 +751,8 @@ function MotionDirector({
 }) {
   const energyReportFrameRef = useRef(0);
   const lastReportedActiveRef = useRef<boolean | null>(null);
+  const lastReportedCadenceRef = useRef(-1);
+  const lastReportedEmphasisRef = useRef(-1);
   const lastReportedEnergyRef = useRef(-1);
   const lastReportedHandoffRef = useRef(-1);
   const lastReportedPeakRef = useRef(-1);
@@ -800,6 +812,8 @@ function MotionDirector({
     );
     const levelTarget = presenterEnergy?.level ?? 0;
     const peakTarget = presenterEnergy?.peak ?? 0;
+    const emphasisTarget = presenterEnergy?.emphasis ?? 0;
+    const cadenceTarget = presenterEnergy?.cadence ?? 0;
     motion.voiceLevel = MathUtils.damp(
       motion.voiceLevel,
       levelTarget,
@@ -809,6 +823,18 @@ function MotionDirector({
     motion.voicePeak = Math.max(
       peakTarget,
       motion.voicePeak * Math.exp(-7.5 * delta),
+    );
+    motion.voiceEmphasis = MathUtils.damp(
+      motion.voiceEmphasis,
+      emphasisTarget,
+      emphasisTarget > motion.voiceEmphasis ? 20 : 6.2,
+      delta,
+    );
+    motion.voiceCadence = MathUtils.damp(
+      motion.voiceCadence,
+      cadenceTarget,
+      cadenceTarget > motion.voiceCadence ? 7.2 : 2.2,
+      delta,
     );
     motion.elapsedMs += delta * 1_000 * pace;
     motion.handoff = decayImpulse(motion.handoff, delta, 3.2);
@@ -826,8 +852,20 @@ function MotionDirector({
     }
     const energyChanged = Math.abs(motion.voiceLevel - lastReportedEnergyRef.current) >= 0.01;
     const peakChanged = Math.abs(motion.voicePeak - lastReportedPeakRef.current) >= 0.01;
-    if ((energyChanged || peakChanged) && copyElementRef.current) {
-      writeKineticSpeechStyle(motion.voiceLevel, motion.voicePeak, speechStyle);
+    const emphasisChanged = Math.abs(
+      motion.voiceEmphasis - lastReportedEmphasisRef.current
+    ) >= 0.01;
+    const cadenceChanged = Math.abs(
+      motion.voiceCadence - lastReportedCadenceRef.current
+    ) >= 0.01;
+    if ((energyChanged || peakChanged || emphasisChanged || cadenceChanged) && copyElementRef.current) {
+      writeKineticSpeechStyle(
+        motion.voiceLevel,
+        motion.voicePeak,
+        speechStyle,
+        motion.voiceEmphasis,
+        motion.voiceCadence,
+      );
       copyElementRef.current.style.setProperty(
         '--presenter-word-lift',
         speechStyle.lift,
@@ -861,6 +899,20 @@ function MotionDirector({
       stageElementRef.current.setAttribute(
         'data-presenter-peak',
         motion.voicePeak.toFixed(2),
+      );
+    }
+    if (emphasisChanged) {
+      lastReportedEmphasisRef.current = motion.voiceEmphasis;
+      stageElementRef.current.setAttribute(
+        'data-presenter-emphasis',
+        motion.voiceEmphasis.toFixed(2),
+      );
+    }
+    if (cadenceChanged) {
+      lastReportedCadenceRef.current = motion.voiceCadence;
+      stageElementRef.current.setAttribute(
+        'data-presenter-cadence',
+        motion.voiceCadence.toFixed(2),
       );
     }
     if (
@@ -1302,7 +1354,10 @@ function OpticalHandoff({
     materialRef.current.uniforms.uSignature.value = signatureIndex;
     materialRef.current.uniforms.uVoice.value = Math.min(
       1.4,
-      motion.voiceLevel + motion.voiceImpulse * 0.48 + motion.voicePeak * 0.22,
+      motion.voiceLevel
+        + motion.voiceImpulse * 0.48
+        + motion.voicePeak * 0.22
+        + motion.voiceEmphasis * 0.32,
     );
     materialRef.current.uniforms.uWidth.value = handoffSample.width;
   });
@@ -1365,7 +1420,10 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
     if (keyRef.current) {
       keyRef.current.intensity = MathUtils.damp(
         keyRef.current.intensity,
-        cue.lighting.key + motion.impact * 0.28,
+        cue.lighting.key
+          + motion.impact * 0.28
+          + motion.voiceEmphasis * 0.22
+          + motion.voiceCadence * 0.08,
         damping,
         delta,
       );
@@ -1404,7 +1462,9 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
           + motion.impact * 1.1
           + motion.voiceImpulse * 0.65
           + motion.voiceLevel * 1.15
-          + motion.voicePeak * 0.28,
+          + motion.voicePeak * 0.28
+          + motion.voiceEmphasis * 0.8
+          + motion.voiceCadence * 0.28,
         damping,
         delta,
       );
@@ -1429,7 +1489,9 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
           + motion.impact * 1.45
           + motion.voiceImpulse * 0.72
           + motion.voiceLevel * 0.92
-          + motion.voicePeak * 0.38,
+          + motion.voicePeak * 0.38
+          + motion.voiceEmphasis * 1.1
+          + motion.voiceCadence * 0.35,
         damping,
         delta,
       );
@@ -1478,6 +1540,8 @@ function CameraRig({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus 
       cue.camera.position[0]
         + cue.camera.shot.positionArc[0] * shotArc * lateralShotScale
         + Math.sin(elapsed * 0.22) * 0.1 * drift
+        + Math.sin(elapsed * (0.9 + motion.voiceCadence * 0.6))
+          * motion.voiceCadence * 0.026 * lateralShotScale
         + motion.overshoot * 0.14 * drift,
       damping,
       delta,
@@ -1488,7 +1552,9 @@ function CameraRig({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus 
         + cue.camera.shot.positionArc[1] * shotArc
         + Math.sin(elapsed * 0.16) * 0.05 * drift
         + motion.voiceImpulse * 0.018
-        + motion.voiceLevel * 0.026,
+        + motion.voiceLevel * 0.026
+        + motion.voiceEmphasis * 0.018
+        + Math.cos(elapsed * 1.1) * motion.voiceCadence * 0.012,
       damping,
       delta,
     );
@@ -1498,7 +1564,8 @@ function CameraRig({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus 
         + cue.camera.portrait.pullback * portraitMix
         + cue.camera.shot.positionArc[2] * shotArc
         + motion.impact * 0.18
-        - motion.voiceLevel * 0.035,
+        - motion.voiceLevel * 0.035
+        - motion.voiceEmphasis * 0.03,
       damping,
       delta,
     );
@@ -1697,7 +1764,14 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
     const damping = phaseDamping(cue.transition.damping, motion.mediaArrival, motion.handoff);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     const elapsed = clock.getElapsedTime();
-    const voice = Math.min(1.4, motion.voiceLevel + motion.voiceImpulse * 0.42 + motion.voicePeak * 0.28);
+    const voice = Math.min(
+      1.4,
+      motion.voiceLevel
+        + motion.voiceImpulse * 0.42
+        + motion.voicePeak * 0.28
+        + motion.voiceEmphasis * 0.3
+        + motion.voiceCadence * 0.1,
+    );
     const portraitMix = 1 - MathUtils.smoothstep(size.width / size.height, 0.72, 1.25);
     const focusX = MathUtils.lerp(cue.lighting.focus[0], 0.52, portraitMix);
     const focusY = MathUtils.lerp(cue.lighting.focus[1], 0.56, portraitMix);
@@ -1796,7 +1870,9 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
       damping,
       delta,
     );
-    particleGroupRef.current.rotation.y = elapsed * cue.environment.drift * 0.012;
+    particleGroupRef.current.rotation.y = elapsed
+      * (cue.environment.drift + motion.voiceCadence * 0.12)
+      * 0.012;
     particleGroupRef.current.rotation.z = Math.sin(elapsed * 0.04) * cue.environment.drift * 0.025;
     pointsMaterialRef.current.color.lerp(
       paletteTargets.primary,
@@ -1846,6 +1922,7 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
 }
 
 const silkVertexShader = /* glsl */ `
+  uniform float uCadence;
   uniform float uTime;
   uniform float uEnergy;
   uniform float uLayer;
@@ -1861,9 +1938,11 @@ const silkVertexShader = /* glsl */ `
     vUv = uv;
     vec3 displaced = position;
     float direction = mix(1.0, -1.0, uLayer);
+    float cadenceWave = sin(uTime * (1.05 + uLayer * 0.16)) * uCadence;
     float broadPhase = position.x * (0.58 + uLayer * 0.12)
       + position.y * (0.08 + uLayer * 0.14)
       + uTime * (0.24 + uLayer * 0.08) * direction
+      + cadenceWave * 0.12
       + uLayer * 2.1;
     float crossPhase = position.y * (1.04 + uLayer * 0.18)
       - uTime * (0.2 + uLayer * 0.07)
@@ -1880,7 +1959,7 @@ const silkVertexShader = /* glsl */ `
     float diagonal = sin(diagonalPhase) * 0.14;
     float pleat = sin(pleatPhase) * (0.035 + uEnergy * 0.025);
     float wave = broad + crossWave + diagonal + pleat;
-    float amplitude = 0.4 + uEnergy * 0.2 + uVoice * 0.035;
+    float amplitude = 0.4 + uEnergy * 0.2 + uVoice * 0.035 + uCadence * 0.018;
     displaced.z += wave * amplitude;
     displaced.y += sin(position.x * 0.46 - uTime * 0.18 + uLayer * 1.6)
       * 0.11 * uEnergy;
@@ -1985,6 +2064,7 @@ function SilkField({
   );
   const uniforms = useMemo(
     () => ({
+      uCadence: { value: 0 },
       uTime: { value: 0 },
       uEnergy: { value: cue.motionEnergy },
       uLayer: { value: foreground ? 1 : 0 },
@@ -2007,13 +2087,21 @@ function SilkField({
     paletteTargets.accent.set(cue.palette.accent);
     paletteTargets.surface.set(cue.palette.surface);
     materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
+    materialRef.current.uniforms.uCadence.value = MathUtils.damp(
+      materialRef.current.uniforms.uCadence.value,
+      motion.voiceCadence,
+      damping + 0.8,
+      delta,
+    );
     materialRef.current.uniforms.uEnergy.value = MathUtils.damp(
       materialRef.current.uniforms.uEnergy.value,
       cue.motionEnergy
         + motion.impact * 0.42
         + motion.voiceImpulse * 0.3
         + motion.voiceLevel * 0.36
-        + motion.voicePeak * 0.08,
+        + motion.voicePeak * 0.08
+        + motion.voiceEmphasis * 0.24
+        + motion.voiceCadence * 0.12,
       damping,
       delta,
     );
@@ -2021,7 +2109,11 @@ function SilkField({
       materialRef.current.uniforms.uVoice.value,
       Math.min(
         1.35,
-        motion.voiceLevel * 0.76 + motion.voicePeak * 0.34 + motion.voiceImpulse * 0.28,
+        motion.voiceLevel * 0.76
+          + motion.voicePeak * 0.34
+          + motion.voiceImpulse * 0.28
+          + motion.voiceEmphasis * 0.28
+          + motion.voiceCadence * 0.1,
       ),
       damping + 1.4,
       delta,
@@ -2422,7 +2514,11 @@ function EvidenceField({
     const elapsed = clock.getElapsedTime();
     const voice = Math.min(
       1.4,
-      motion.voiceLevel + motion.voiceImpulse * 0.42 + motion.voicePeak * 0.24,
+      motion.voiceLevel
+        + motion.voiceImpulse * 0.42
+        + motion.voicePeak * 0.24
+        + motion.voiceEmphasis * 0.24
+        + motion.voiceCadence * 0.08,
     );
     const targetScale = enabled ? cue.composition.chartScale : 0;
     if (enabled) {
@@ -2781,7 +2877,11 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
     const elapsed = clock.getElapsedTime();
     const voice = Math.min(
       1.4,
-      motion.voiceLevel + motion.voiceImpulse * 0.5 + motion.voicePeak * 0.22,
+      motion.voiceLevel
+        + motion.voiceImpulse * 0.5
+        + motion.voicePeak * 0.22
+        + motion.voiceEmphasis * 0.34
+        + motion.voiceCadence * 0.1,
     );
     groupRef.current.position.x = MathUtils.damp(
       groupRef.current.position.x,
@@ -2887,7 +2987,9 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
           + motion.impact * 0.72
           + motion.voiceImpulse * 0.46
           + motion.voiceLevel * 0.55
-          + motion.voicePeak * 0.22,
+          + motion.voicePeak * 0.22
+          + motion.voiceEmphasis * 0.62
+          + motion.voiceCadence * 0.18,
         damping,
         delta,
       );
@@ -2925,7 +3027,7 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
     );
     faceUniformValues.uImpact.value = MathUtils.damp(
       faceUniformValues.uImpact.value,
-      motion.impact + motion.voiceImpulse * 0.52,
+      motion.impact + motion.voiceImpulse * 0.52 + motion.voiceEmphasis * 0.38,
       damping,
       delta,
     );
@@ -2975,7 +3077,12 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
 
     if (prismRef.current) {
       prismRef.current.rotation.x = 0.38 + Math.sin(elapsed * 0.24) * 0.1;
-      prismRef.current.rotation.y += delta * (0.16 + cue.motionEnergy * 0.22 + voice * 0.08);
+      prismRef.current.rotation.y += delta * (
+        0.16
+          + cue.motionEnergy * 0.22
+          + voice * 0.08
+          + motion.voiceCadence * 0.16
+      );
       prismRef.current.rotation.z = 0.18 + Math.sin(elapsed * 0.31) * 0.12;
       prismRef.current.position.z = 0.21 + motion.impact * 0.06 + voice * 0.012;
       const prismScale = 0.88 + motion.impact * 0.14 + voice * 0.07;
@@ -3264,7 +3371,14 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
     if (!groupRef.current || !lineMaterialRef.current || !pointsMaterialRef.current) return;
     const damping = phaseDamping(cue.transition.damping, motion.actorArrival, motion.handoff);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
-    const voice = Math.min(1.4, motion.voiceLevel + motion.voiceImpulse * 0.45 + motion.voicePeak * 0.25);
+    const voice = Math.min(
+      1.4,
+      motion.voiceLevel
+        + motion.voiceImpulse * 0.45
+        + motion.voicePeak * 0.25
+        + motion.voiceEmphasis * 0.28
+        + motion.voiceCadence * 0.12,
+    );
     const actorPresence = MathUtils.smoothstep(cue.composition.growthScale, 0.08, 0.24);
     const scale = MathUtils.damp(
       groupRef.current.scale.x,

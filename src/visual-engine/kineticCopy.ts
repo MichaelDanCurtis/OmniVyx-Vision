@@ -48,19 +48,35 @@ export function writeKineticSpeechStyle(
   level: number,
   peak: number,
   target: KineticSpeechStyle,
+  emphasis = 0,
+  cadence = 0,
 ): KineticSpeechStyle {
   const boundedLevel = clamp01(level);
   const boundedPeak = clamp01(peak);
+  const boundedEmphasis = clamp01(emphasis);
+  const boundedCadence = clamp01(cadence);
 
-  target.brightness = (1 + boundedLevel * 0.18).toFixed(3);
-  target.glint = clamp(
-    0.08 + boundedLevel * 0.44 + boundedPeak * 0.16,
-    0.08,
-    0.58,
+  target.brightness = (
+    1 + boundedLevel * 0.14 + boundedEmphasis * 0.08 + boundedCadence * 0.02
   ).toFixed(3);
-  target.glintPosition = `${Math.round(34 + boundedPeak * 32)}%`;
-  target.lift = `${(-boundedLevel * 0.018).toFixed(4)}em`;
-  target.scale = (1 + boundedPeak * 0.006).toFixed(4);
+  target.glint = clamp(
+    0.08
+      + boundedLevel * 0.36
+      + boundedPeak * 0.12
+      + boundedEmphasis * 0.18
+      + boundedCadence * 0.05,
+    0.08,
+    0.62,
+  ).toFixed(3);
+  target.glintPosition = `${Math.round(
+    34 + boundedPeak * 24 + boundedEmphasis * 12 + boundedCadence * 4,
+  )}%`;
+  target.lift = `${(
+    -boundedLevel * 0.014 - boundedEmphasis * 0.008 - boundedCadence * 0.002
+  ).toFixed(4)}em`;
+  target.scale = (
+    1 + boundedPeak * 0.003 + boundedEmphasis * 0.006 + boundedCadence * 0.001
+  ).toFixed(4);
   return target;
 }
 

@@ -8,7 +8,7 @@ The current prototype focuses on a presenter-first motion deck and the next majo
 
 - Tauri 2 native presenter shell with a Rust Presenter Kernel.
 - Vite, React, and TypeScript authoring/stage surface.
-- Text/voice cue simulation for live presentation flow.
+- Text/voice cue simulation plus low-latency level, peak, emphasis, and cadence response.
 - Typed native signal intake for transcripts, intent candidates, holds, resumes, and manual cues.
 - Design specs for the presenter MVP and visual engine proof.
 - Local reference experiments are intentionally ignored from git.

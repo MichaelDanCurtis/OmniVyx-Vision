@@ -14,6 +14,8 @@ interface MediaMotionState {
   impact: number;
   mediaArrival: number;
   overshoot: number;
+  voiceCadence: number;
+  voiceEmphasis: number;
   voiceImpulse: number;
   voiceLevel: number;
   voicePeak: number;
@@ -189,7 +191,11 @@ export function CinematicMediaPlate({
     const targetOpacity = enabled ? cue.media.opacity : 0;
     const voice = Math.min(
       1.4,
-      motion.voiceLevel + motion.voiceImpulse * 0.48 + motion.voicePeak * 0.22,
+      motion.voiceLevel
+        + motion.voiceImpulse * 0.48
+        + motion.voicePeak * 0.22
+        + motion.voiceEmphasis * 0.28
+        + motion.voiceCadence * 0.1,
     );
     paletteTargets.primary.set(cue.palette.primary);
     paletteTargets.secondary.set(cue.palette.secondary);
@@ -208,7 +214,9 @@ export function CinematicMediaPlate({
         + motion.impact * 0.36
         + motion.voiceImpulse * 0.22
         + motion.voiceLevel * 0.3
-        + motion.voicePeak * 0.08,
+        + motion.voicePeak * 0.08
+        + motion.voiceEmphasis * 0.2
+        + motion.voiceCadence * 0.1,
       damping,
       delta,
     );
@@ -226,7 +234,7 @@ export function CinematicMediaPlate({
     );
     materialRef.current.uniforms.uImpact.value = MathUtils.damp(
       materialRef.current.uniforms.uImpact.value,
-      motion.impact + motion.voiceImpulse * 0.28,
+      motion.impact + motion.voiceImpulse * 0.28 + motion.voiceEmphasis * 0.2,
       damping,
       delta,
     );

@@ -43,13 +43,13 @@ describe('resolveKineticSpeechStyle', () => {
   it('bounds the maximum live response while reusing the render-loop sample', () => {
     const sample = resolveKineticSpeechStyle(0, 0);
 
-    expect(writeKineticSpeechStyle(2, 4, sample)).toBe(sample);
+    expect(writeKineticSpeechStyle(2, 4, sample, 3, 2)).toBe(sample);
     expect(sample).toEqual({
-      brightness: '1.180',
-      glint: '0.580',
-      glintPosition: '66%',
-      lift: '-0.0180em',
-      scale: '1.0060',
+      brightness: '1.240',
+      glint: '0.620',
+      glintPosition: '74%',
+      lift: '-0.0240em',
+      scale: '1.0100',
     });
   });
 });
