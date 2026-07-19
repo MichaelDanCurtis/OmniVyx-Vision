@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>OmniVyx Vision uses microphone audio to react to presenter energy and recognize spoken cues during a presentation.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>OmniVyx Vision uses speech recognition to match a presenter's words to authored visual cues.</string>
+</dict>
+</plist>

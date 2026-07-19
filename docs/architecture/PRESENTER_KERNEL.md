@@ -58,6 +58,10 @@ The visual grammar is cue-directed rather than globally decorative. Each cue aut
 
 Semantic transitions and presenter energy are separate control channels. An accepted intent changes the deterministic stage event, while every accepted presenter utterance may also emit a bounded transient pulse that affects camera, lighting, cloth, glass, and hero motion without mutating the active event. Cue arrival, impact, and overshoot values plus the presenter pulse live on one stable mutable motion bus, keeping choreography synchronized without React state updates or render-loop allocations.
 
+Continuous presenter energy now enters through a second stable mutable signal. The browser/native-webview proof requests a mono microphone stream, reuses one 512-sample PCM buffer, and applies frame-rate-independent attack and release before the WebGL director samples it. Camera breathing, media refraction, cloth energy, glass, product highlights, network bloom, and cinematic lighting respond without React state updates. A manual cue or finalized transcript emits a bounded 220 ms fallback kick only when waveform capture is inactive; runtime attributes distinguish that fallback (`audio: idle`) from a real microphone signal (`audio: active`). Recognition sessions keep current show context in a ref so relative commands are never evaluated against the state from when listening began.
+
+The macOS bundle declares microphone and speech-recognition usage descriptions. The native audio-energy surface is implemented as Web Audio hosted in WKWebView but remains `planned` until microphone device preflight and capture are verified in the packaged app. A future Core Audio adapter can write the same signal contract without changing the stage. Streaming transcription remains planned behind the separate Apple SpeechAnalyzer adapter.
+
 Show schema version 4 adds authored phase windows for camera, media, actors, and copy. Every window is a normalized interval within the cue duration, allowing the director to lead with camera intent, hand motion to the media and live actors, then reveal copy instead of making every layer chase a target simultaneously. The previous copy remains as one temporary, inert DOM layer during its authored exit and is removed after the handoff. Reduced-motion environments suppress that outgoing layer.
 
 The media target controls asset, opacity, depth, scale, offset, drift, palette tint, and tempo. The current optical master is a project-local 1672x941 generated plate composited as one cached, depth-displaced shader surface behind the live 3D actors; presenter energy and cue tempo modulate its motion without recreating the texture.
@@ -73,7 +77,7 @@ The operator preview uses a stable aspect ratio. Presentation view expands the s
 ## Build Order
 
 1. Expand the versioned cinematic show document into persisted authoring and rehearsal documents.
-2. Native microphone capture and audio-level telemetry.
+2. Promote the Web Audio energy proof to a native Core Audio adapter with device selection and preflight.
 3. Apple SpeechAnalyzer adapter with partial and final transcript channels.
 4. Local semantic candidate engine with confidence, hysteresis, and cooldown controls.
 5. Rehearsal capture that binds presenter language to authored show intent.

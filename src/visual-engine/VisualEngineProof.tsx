@@ -1,4 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import {
+  createPresenterEnergySignal,
+  kickPresenterEnergySignal,
+  releasePresenterEnergySignal,
+  resetPresenterEnergySignal,
+  startPresenterAudioMeter,
+  type PresenterAudioMeter,
+  type PresenterEnergySignal,
+} from '../domain/presenterAudio';
 import { getSpeechRecognition, type SpeechRecognitionLike } from '../domain/speechRecognition';
 import {
   acceptPresenterSignal,
@@ -23,10 +32,40 @@ export function VisualEngineProof() {
   const [lastIntent, setLastIntent] = useState<StageIntentMatch | null>(null);
   const [lastNativeReceipt, setLastNativeReceipt] = useState<PresenterReceipt | null>(null);
   const [listening, setListening] = useState(false);
-  const [recognition, setRecognition] = useState<SpeechRecognitionLike | null>(null);
   const [presenting, setPresenting] = useState(false);
   const [presenterPulse, setPresenterPulse] = useState(0);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const audioMeterRef = useRef<PresenterAudioMeter | null>(null);
+  const listeningRef = useRef(false);
+  const listeningGenerationRef = useRef(0);
+  const presenterKickTimerRef = useRef<number | null>(null);
+  const stageStateRef = useRef(stageState);
+  const presenterEnergyRef = useRef<PresenterEnergySignal | null>(null);
+  if (!presenterEnergyRef.current) {
+    presenterEnergyRef.current = createPresenterEnergySignal();
+  }
+  const presenterEnergy = presenterEnergyRef.current;
+  stageStateRef.current = stageState;
   const canUseMic = typeof window !== 'undefined' && getSpeechRecognition() !== null;
+
+  useEffect(() => () => {
+    listeningGenerationRef.current += 1;
+    if (presenterKickTimerRef.current !== null) {
+      window.clearTimeout(presenterKickTimerRef.current);
+      presenterKickTimerRef.current = null;
+    }
+    listeningRef.current = false;
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onend = null;
+      recognition.stop();
+    }
+    audioMeterRef.current?.stop();
+    audioMeterRef.current = null;
+    resetPresenterEnergySignal(presenterEnergy);
+  }, []);
 
   useEffect(() => {
     if (!presenting) return undefined;
@@ -38,7 +77,7 @@ export function VisualEngineProof() {
 
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();
-      setPresenterPulse((current) => current + 1);
+      pulsePresenter();
       setStageState((current) => {
         const order = omniVyxCinematicShow.cueOrder;
         const currentIndex = order.indexOf(current.activeEvent);
@@ -52,7 +91,7 @@ export function VisualEngineProof() {
   }, [presenting]);
 
   function handleEvent(eventId: StageEventId) {
-    setPresenterPulse((current) => current + 1);
+    pulsePresenter();
     setStageState((current) => applyStageEvent(current, eventId));
   }
 
@@ -64,9 +103,10 @@ export function VisualEngineProof() {
     const trimmed = value.trim();
     if (!trimmed) return;
 
-    const intent = findStageIntent(trimmed, stageState.activeEvent, stageState.previousEvent);
+    const currentStage = stageStateRef.current;
+    const intent = findStageIntent(trimmed, currentStage.activeEvent, currentStage.previousEvent);
     const occurredAtMs = Date.now();
-    setPresenterPulse((current) => current + 1);
+    pulsePresenter();
     void acceptPresenterSignal({
       signalId: createSignalId(),
       showId: 'omnivyx-launch-proof',
@@ -89,9 +129,8 @@ export function VisualEngineProof() {
   }
 
   function toggleListening() {
-    if (listening) {
-      recognition?.stop();
-      setListening(false);
+    if (listeningRef.current) {
+      stopPresenterInputs();
       return;
     }
 
@@ -106,21 +145,72 @@ export function VisualEngineProof() {
       const spoken = latest?.[0]?.transcript?.trim();
       if (spoken) submitTranscript(spoken);
     };
-    nextRecognition.onend = () => setListening(false);
+    nextRecognition.onend = () => {
+      if (recognitionRef.current === nextRecognition) stopPresenterInputs(false);
+    };
 
     try {
       nextRecognition.start();
-      setRecognition(nextRecognition);
+      const generation = listeningGenerationRef.current + 1;
+      listeningGenerationRef.current = generation;
+      recognitionRef.current = nextRecognition;
+      listeningRef.current = true;
       setListening(true);
+      void startPresenterAudioMeter(presenterEnergy)
+        .then((meter) => {
+          if (!meter) return;
+          if (
+            listeningGenerationRef.current !== generation
+            || !listeningRef.current
+          ) {
+            meter.stop();
+            return;
+          }
+          audioMeterRef.current?.stop();
+          audioMeterRef.current = meter;
+        })
+        .catch(() => undefined);
     } catch {
+      recognitionRef.current = null;
+      listeningRef.current = false;
       setListening(false);
     }
+  }
+
+  function stopPresenterInputs(stopRecognition = true) {
+    listeningGenerationRef.current += 1;
+    listeningRef.current = false;
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (stopRecognition && recognition) {
+      recognition.onresult = null;
+      recognition.onend = null;
+      recognition.stop();
+    }
+    audioMeterRef.current?.stop();
+    audioMeterRef.current = null;
+    resetPresenterEnergySignal(presenterEnergy);
+    setListening(false);
+  }
+
+  function pulsePresenter() {
+    setPresenterPulse((current) => current + 1);
+    if (presenterEnergy.active) return;
+    kickPresenterEnergySignal(presenterEnergy);
+    if (presenterKickTimerRef.current !== null) {
+      window.clearTimeout(presenterKickTimerRef.current);
+    }
+    presenterKickTimerRef.current = window.setTimeout(() => {
+      presenterKickTimerRef.current = null;
+      if (!presenterEnergy.active) releasePresenterEnergySignal(presenterEnergy);
+    }, 220);
   }
 
   return (
     <section className={presenting ? 'visual-engine-proof presenting' : 'visual-engine-proof'}>
       <div className="visual-engine-layout">
         <LaunchStage
+          presenterEnergy={presenterEnergy}
           presenterPulse={presenterPulse}
           presenting={presenting}
           state={stageState}

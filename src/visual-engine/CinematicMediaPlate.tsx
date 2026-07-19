@@ -15,6 +15,8 @@ interface MediaMotionState {
   mediaArrival: number;
   overshoot: number;
   voiceImpulse: number;
+  voiceLevel: number;
+  voicePeak: number;
 }
 
 interface CinematicMediaPlateProps {
@@ -129,7 +131,11 @@ export function CinematicMediaPlate({
     materialRef.current.uniforms.uTime.value += delta * playbackRateRef.current;
     materialRef.current.uniforms.uEnergy.value = MathUtils.damp(
       materialRef.current.uniforms.uEnergy.value,
-      cue.media.drift + motion.impact * 0.36 + motion.voiceImpulse * 0.22,
+      cue.media.drift
+        + motion.impact * 0.36
+        + motion.voiceImpulse * 0.22
+        + motion.voiceLevel * 0.3
+        + motion.voicePeak * 0.08,
       damping,
       delta,
     );
@@ -157,7 +163,10 @@ export function CinematicMediaPlate({
     );
     meshRef.current.position.y = MathUtils.damp(
       meshRef.current.position.y,
-      cue.media.offset[1] + 0.12 + motion.voiceImpulse * 0.015,
+      cue.media.offset[1]
+        + 0.12
+        + motion.voiceImpulse * 0.015
+        + motion.voiceLevel * 0.022,
       damping,
       delta,
     );

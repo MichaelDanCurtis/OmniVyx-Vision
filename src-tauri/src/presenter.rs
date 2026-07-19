@@ -85,6 +85,12 @@ pub fn get_presenter_capabilities() -> PresenterCapabilities {
                 detail: "WebGL stage hosted by the native presenter window.",
             },
             NativeSubsystem {
+                id: "audio-energy",
+                status: "planned",
+                provider: "Web Audio / WKWebView",
+                detail: "The low-latency meter is implemented; native device preflight and capture verification remain.",
+            },
+            NativeSubsystem {
                 id: "speech-recognition",
                 status: "planned",
                 provider: "Apple SpeechAnalyzer",
@@ -147,6 +153,13 @@ mod tests {
         assert_eq!(capabilities.kernel_version, "presenter-kernel/0.1");
         assert_eq!(capabilities.subsystems[0].id, "visual-stage");
         assert_eq!(capabilities.subsystems[0].status, "ready");
-        assert_eq!(capabilities.subsystems[1].id, "speech-recognition");
+        assert!(capabilities
+            .subsystems
+            .iter()
+            .any(|subsystem| subsystem.id == "audio-energy" && subsystem.status == "planned"));
+        assert!(capabilities
+            .subsystems
+            .iter()
+            .any(|subsystem| subsystem.id == "speech-recognition" && subsystem.status == "planned"));
     }
 }
