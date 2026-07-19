@@ -16,6 +16,16 @@ export interface CinematicCue {
     position: Vector3Tuple;
     target: Vector3Tuple;
     fov: number;
+    shot: {
+      positionArc: Vector3Tuple;
+      targetArc: Vector3Tuple;
+      roll: number;
+      fovArc: number;
+    };
+    portrait: {
+      targetOffset: Vector3Tuple;
+      pullback: number;
+    };
   };
   transition: {
     durationMs: number;
@@ -85,7 +95,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 7;
+  schemaVersion: 8;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -103,7 +113,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 7,
+  schemaVersion: 8,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -115,7 +125,21 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         headlineLines: ['The stage is', 'listening.'],
         body: 'A cinematic presentation system directed by the meaning and rhythm of your voice.',
       },
-      camera: { position: [0, 1.55, 7.5], target: [0, 0.05, 0], fov: 42 },
+      camera: {
+        position: [0, 1.55, 7.5],
+        target: [0, 0.05, 0],
+        fov: 42,
+        shot: {
+          positionArc: [-0.18, 0.14, -0.28],
+          targetArc: [0.08, 0.04, 0],
+          roll: -0.012,
+          fovArc: -0.8,
+        },
+        portrait: {
+          targetOffset: [0.2, -0.04, 0],
+          pullback: 0.9,
+        },
+      },
       transition: {
         durationMs: 1_600,
         damping: 3.8,
@@ -191,7 +215,21 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         headlineLines: ['Presentations,', 'performed.'],
         body: 'Not a sequence of slides. A responsive visual world that moves with the room.',
       },
-      camera: { position: [-0.62, 1.34, 6.08], target: [0.08, 0.1, 0], fov: 38 },
+      camera: {
+        position: [-0.62, 1.34, 6.08],
+        target: [0.08, 0.1, 0],
+        fov: 38,
+        shot: {
+          positionArc: [-0.58, 0.18, -0.82],
+          targetArc: [0.22, 0.06, 0],
+          roll: -0.025,
+          fovArc: -2.2,
+        },
+        portrait: {
+          targetOffset: [0.95, -0.12, 0],
+          pullback: 1.6,
+        },
+      },
       transition: {
         durationMs: 1_150,
         damping: 5.6,
@@ -267,7 +305,21 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         headlineLines: ['Intent becomes', 'motion.'],
         body: 'Your words shape composition, pacing, emphasis, and the next visual beat in real time.',
       },
-      camera: { position: [0.34, 1.43, 6.72], target: [-0.2, 0.12, -0.15], fov: 40 },
+      camera: {
+        position: [0.34, 1.43, 6.72],
+        target: [-0.2, 0.12, -0.15],
+        fov: 40,
+        shot: {
+          positionArc: [0.42, -0.08, 0.36],
+          targetArc: [-0.24, 0.08, 0],
+          roll: 0.018,
+          fovArc: 1.2,
+        },
+        portrait: {
+          targetOffset: [0.72, -0.08, 0],
+          pullback: 1.2,
+        },
+      },
       transition: {
         durationMs: 1_300,
         damping: 4.8,
@@ -343,7 +395,21 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         headlineLines: ['Every idea', 'can grow.'],
         body: 'Stories, evidence, live data, and generated worlds remain part of one continuous composition.',
       },
-      camera: { position: [0.92, 1.2, 6.2], target: [0.42, 0.22, -0.1], fov: 39 },
+      camera: {
+        position: [0.92, 1.2, 6.2],
+        target: [0.42, 0.22, -0.1],
+        fov: 39,
+        shot: {
+          positionArc: [0.62, 0.26, -0.22],
+          targetArc: [0.26, 0.18, 0],
+          roll: 0.022,
+          fovArc: -1,
+        },
+        portrait: {
+          targetOffset: [1, -0.1, 0],
+          pullback: 1.2,
+        },
+      },
       transition: {
         durationMs: 1_700,
         damping: 3.4,
@@ -419,7 +485,21 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         headlineLines: ['The numbers', 'arrive on cue.'],
         body: 'Prepared data enters the stage when the conversation needs it, then yields to the story.',
       },
-      camera: { position: [0.46, 1.28, 5.82], target: [0.48, 0.08, 0.18], fov: 37 },
+      camera: {
+        position: [0.46, 1.28, 5.82],
+        target: [0.48, 0.08, 0.18],
+        fov: 37,
+        shot: {
+          positionArc: [-0.38, 0.04, -0.62],
+          targetArc: [0.32, 0.02, 0],
+          roll: -0.012,
+          fovArc: -1.8,
+        },
+        portrait: {
+          targetOffset: [0.2, -0.04, 0],
+          pullback: 1,
+        },
+      },
       transition: {
         durationMs: 900,
         damping: 6.4,
@@ -495,7 +575,21 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         headlineLines: ['Stay with', 'the moment.'],
         body: 'The stage keeps breathing without competing with the presenter or forcing the next beat.',
       },
-      camera: { position: [0.16, 1.35, 6.82], target: [0, 0.08, 0], fov: 41 },
+      camera: {
+        position: [0.16, 1.35, 6.82],
+        target: [0, 0.08, 0],
+        fov: 41,
+        shot: {
+          positionArc: [0, 0.1, 0.48],
+          targetArc: [0, 0, 0],
+          roll: 0,
+          fovArc: 1.4,
+        },
+        portrait: {
+          targetOffset: [0.34, -0.06, 0],
+          pullback: 1,
+        },
+      },
       transition: {
         durationMs: 1_900,
         damping: 3,
@@ -571,7 +665,21 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         headlineLines: ['Make the room', 'feel it.'],
         body: 'Authored with AI. Rehearsed with a human. Performed together, live.',
       },
-      camera: { position: [0, 1.45, 6.38], target: [0.08, 0.1, 0], fov: 39 },
+      camera: {
+        position: [0, 1.45, 6.38],
+        target: [0.08, 0.1, 0],
+        fov: 39,
+        shot: {
+          positionArc: [-0.46, 0.16, -0.72],
+          targetArc: [0.12, 0.06, 0],
+          roll: -0.018,
+          fovArc: -1.6,
+        },
+        portrait: {
+          targetOffset: [0.75, -0.1, 0],
+          pullback: 1.4,
+        },
+      },
       transition: {
         durationMs: 1_850,
         damping: 3.6,

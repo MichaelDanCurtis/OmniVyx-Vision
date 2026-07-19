@@ -73,6 +73,14 @@ export function sampleCueHandoff(
   };
 }
 
+export function sampleCameraShotArc(progress: number): number {
+  if (!Number.isFinite(progress) || progress < 0 || progress > 1) {
+    throw new Error('Camera shot progress must be a finite value between zero and one.');
+  }
+  if (progress === 0 || progress === 1) return 0;
+  return Math.sin(progress * Math.PI);
+}
+
 export function samplePhaseWindow(
   progress: number,
   [start, end]: MotionPhaseWindow,

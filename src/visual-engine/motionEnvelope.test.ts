@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   decayImpulse,
+  sampleCameraShotArc,
   sampleCueHandoff,
   sampleCueMotion,
   samplePhaseWindow,
@@ -71,6 +72,15 @@ describe('motionEnvelope', () => {
     expect(() => sampleCueHandoff(1.1, 200)).toThrow(/between zero and one/);
     expect(() => sampleCueHandoff(0.4, -1)).toThrow(/non-negative finite/);
     expect(() => sampleCueHandoff(0.4, 200, -0.1)).toThrow(/between zero and one/);
+  });
+
+  it('shapes a camera shot through one transient arc', () => {
+    expect(sampleCameraShotArc(0)).toBe(0);
+    expect(sampleCameraShotArc(0.25)).toBeCloseTo(Math.SQRT1_2, 8);
+    expect(sampleCameraShotArc(0.5)).toBe(1);
+    expect(sampleCameraShotArc(0.75)).toBeCloseTo(Math.SQRT1_2, 8);
+    expect(sampleCameraShotArc(1)).toBe(0);
+    expect(() => sampleCameraShotArc(1.1)).toThrow(/between zero and one/);
   });
 
   it('stages layer motion inside an authored normalized window', () => {

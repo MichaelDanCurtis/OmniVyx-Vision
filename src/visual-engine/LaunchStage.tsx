@@ -34,6 +34,7 @@ import {
 import { getCinematicCue, type CinematicCue } from './cinematicScore';
 import {
   decayImpulse,
+  sampleCameraShotArc,
   sampleCueHandoff,
   sampleCueMotion,
   samplePhaseWindow,
@@ -137,6 +138,8 @@ export function LaunchStage({
       data-lens-bokeh={cue.lens.bokehScale.toFixed(2)}
       data-lens-exposure={cue.lens.exposure.toFixed(2)}
       data-lens-focus-range={cue.lens.focusRange.toFixed(2)}
+      data-shot-dolly={cue.camera.shot.positionArc[2].toFixed(2)}
+      data-shot-roll={cue.camera.shot.roll.toFixed(3)}
       data-cue-effective-duration={Math.round(scaleCueDuration(cue.transition.durationMs, cuePace))}
       data-cue-pace={cuePace.toFixed(3)}
       data-world-drift={cue.environment.drift.toFixed(2)}
@@ -921,15 +924,21 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
 
 function CameraRig({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
   const camera = useThree((threeState) => threeState.camera) as PerspectiveCamera;
+  const rollRef = useRef(0);
   const target = useMemo(() => new Vector3(0, 0.05, 0), []);
 
-  useFrame(({ clock }, delta) => {
+  useFrame(({ clock, size }, delta) => {
     const elapsed = clock.getElapsedTime();
     const damping = phaseDamping(cue.transition.damping, motion.cameraArrival, motion.handoff);
     const drift = cue.motionEnergy;
+    const shotArc = sampleCameraShotArc(motion.cameraArrival);
+    const portraitMix = 1 - MathUtils.smoothstep(size.width / size.height, 0.72, 1.25);
+    const lateralShotScale = 1 - portraitMix * 0.65;
+    const opticalShotScale = 1 - portraitMix * 0.55;
     camera.position.x = MathUtils.damp(
       camera.position.x,
       cue.camera.position[0]
+        + cue.camera.shot.positionArc[0] * shotArc * lateralShotScale
         + Math.sin(elapsed * 0.22) * 0.1 * drift
         + motion.overshoot * 0.14 * drift,
       damping,
@@ -938,6 +947,7 @@ function CameraRig({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus 
     camera.position.y = MathUtils.damp(
       camera.position.y,
       cue.camera.position[1]
+        + cue.camera.shot.positionArc[1] * shotArc
         + Math.sin(elapsed * 0.16) * 0.05 * drift
         + motion.voiceImpulse * 0.018
         + motion.voiceLevel * 0.026,
@@ -946,19 +956,56 @@ function CameraRig({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus 
     );
     camera.position.z = MathUtils.damp(
       camera.position.z,
-      cue.camera.position[2] + motion.impact * 0.18 - motion.voiceLevel * 0.035,
+      cue.camera.position[2]
+        + cue.camera.portrait.pullback * portraitMix
+        + cue.camera.shot.positionArc[2] * shotArc
+        + motion.impact * 0.18
+        - motion.voiceLevel * 0.035,
       damping,
       delta,
     );
-    target.x = MathUtils.damp(target.x, cue.camera.target[0], damping, delta);
-    target.y = MathUtils.damp(target.y, cue.camera.target[1], damping, delta);
-    target.z = MathUtils.damp(target.z, cue.camera.target[2], damping, delta);
-    const nextFov = MathUtils.damp(camera.fov, cue.camera.fov, damping, delta);
+    target.x = MathUtils.damp(
+      target.x,
+      cue.camera.target[0]
+        + cue.camera.portrait.targetOffset[0] * portraitMix
+        + cue.camera.shot.targetArc[0] * shotArc,
+      damping,
+      delta,
+    );
+    target.y = MathUtils.damp(
+      target.y,
+      cue.camera.target[1]
+        + cue.camera.portrait.targetOffset[1] * portraitMix
+        + cue.camera.shot.targetArc[1] * shotArc,
+      damping,
+      delta,
+    );
+    target.z = MathUtils.damp(
+      target.z,
+      cue.camera.target[2]
+        + cue.camera.portrait.targetOffset[2] * portraitMix
+        + cue.camera.shot.targetArc[2] * shotArc,
+      damping,
+      delta,
+    );
+    const nextFov = MathUtils.damp(
+      camera.fov,
+      cue.camera.fov + cue.camera.shot.fovArc * shotArc * opticalShotScale,
+      damping,
+      delta,
+    );
     if (Math.abs(nextFov - camera.fov) > 0.0001) {
       camera.fov = nextFov;
       camera.updateProjectionMatrix();
     }
+    rollRef.current = MathUtils.damp(
+      rollRef.current,
+      cue.camera.shot.roll * shotArc * opticalShotScale,
+      damping,
+      delta,
+    );
     camera.lookAt(target);
+    camera.rotateZ(rollRef.current);
   });
 
   return null;

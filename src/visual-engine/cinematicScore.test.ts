@@ -8,7 +8,7 @@ import { stageEvents } from './stageScore';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(7);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(8);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -22,6 +22,12 @@ describe('cinematicScore', () => {
         ...cue.camera.position,
         ...cue.camera.target,
         cue.camera.fov,
+        ...cue.camera.shot.positionArc,
+        ...cue.camera.shot.targetArc,
+        cue.camera.shot.roll,
+        cue.camera.shot.fovArc,
+        ...cue.camera.portrait.targetOffset,
+        cue.camera.portrait.pullback,
         cue.transition.durationMs,
         cue.transition.damping,
         cue.transition.copyDelayMs,
@@ -54,6 +60,11 @@ describe('cinematicScore', () => {
       expect(cue.transition.durationMs).toBeGreaterThan(0);
       expect(cue.camera.fov).toBeGreaterThanOrEqual(30);
       expect(cue.camera.fov).toBeLessThanOrEqual(55);
+      expect(cue.camera.fov + cue.camera.shot.fovArc).toBeGreaterThanOrEqual(30);
+      expect(cue.camera.fov + cue.camera.shot.fovArc).toBeLessThanOrEqual(55);
+      expect(Math.abs(cue.camera.shot.roll)).toBeLessThanOrEqual(0.04);
+      expect(cue.camera.portrait.pullback).toBeGreaterThanOrEqual(0);
+      expect(cue.camera.portrait.pullback).toBeLessThanOrEqual(2);
       expect(cue.copy.headline.length).toBeGreaterThan(0);
       expect(cue.copy.headlineLines.join(' ')).toBe(cue.copy.headline);
       expect(cue.copy.headlineLines.length).toBeGreaterThanOrEqual(2);
@@ -151,5 +162,19 @@ describe('cinematicScore', () => {
     expect(chart.grid).toBeGreaterThan(growth.grid);
     expect(hold.glow).toBeLessThan(reveal.glow);
     expect(hold.drift).toBeLessThan(reveal.drift);
+  });
+
+  it('authors distinct camera paths for reveal, growth, evidence, and hold', () => {
+    const reveal = getCinematicCue('reveal_product').camera.shot;
+    const growth = getCinematicCue('grow_system').camera.shot;
+    const chart = getCinematicCue('summon_dynamic_chart').camera.shot;
+    const hold = getCinematicCue('hold').camera.shot;
+
+    expect(reveal.positionArc[2]).toBeLessThan(-0.7);
+    expect(growth.positionArc[0]).toBeGreaterThan(0.5);
+    expect(chart.targetArc[0]).toBeGreaterThan(0.3);
+    expect(hold.positionArc[2]).toBeGreaterThan(0.4);
+    expect(getCinematicCue('reveal_product').camera.portrait.targetOffset[0])
+      .toBeGreaterThan(0.8);
   });
 });
