@@ -5,6 +5,7 @@ import type {
   MotionSignature,
 } from './motionEnvelope';
 import type { CuePacingProfile } from './cuePacing';
+import type { FormationSignature } from './formationSignature';
 import type { SceneSignature } from './sceneSignature';
 import type { TypographySignature } from './kineticCopy';
 import type { SpatialSignature } from './spatialSignature';
@@ -85,6 +86,7 @@ export interface CinematicCue {
     tintStrength: number;
   };
   composition: {
+    signature: FormationSignature;
     coreScale: number;
     growthScale: number;
     chartScale: number;
@@ -149,7 +151,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 15;
+  schemaVersion: 16;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -167,7 +169,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 15,
+  schemaVersion: 16,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -237,6 +239,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         tintStrength: 0.28,
       },
       composition: {
+        signature: 'listening_orbit',
         coreScale: 0.72,
         growthScale: 0.03,
         chartScale: 0.02,
@@ -364,6 +367,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         tintStrength: 0.16,
       },
       composition: {
+        signature: 'product_monolith',
         coreScale: 1.12,
         growthScale: 0.04,
         chartScale: 0.02,
@@ -491,6 +495,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         tintStrength: 0.38,
       },
       composition: {
+        signature: 'directional_split',
         coreScale: 0.86,
         growthScale: 0.05,
         chartScale: 0.02,
@@ -618,6 +623,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         tintStrength: 0.58,
       },
       composition: {
+        signature: 'living_canopy',
         coreScale: 0.04,
         growthScale: 1,
         chartScale: 0.02,
@@ -745,6 +751,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         tintStrength: 0.46,
       },
       composition: {
+        signature: 'evidence_rail',
         coreScale: 0.02,
         growthScale: 0.04,
         chartScale: 1,
@@ -872,6 +879,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         tintStrength: 0.42,
       },
       composition: {
+        signature: 'quiet_suspension',
         coreScale: 0.7,
         growthScale: 0.04,
         chartScale: 0.02,
@@ -999,6 +1007,7 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         tintStrength: 0.24,
       },
       composition: {
+        signature: 'final_convergence',
         coreScale: 0.94,
         growthScale: 0.82,
         chartScale: 0.78,

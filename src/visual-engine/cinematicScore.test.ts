@@ -13,10 +13,11 @@ import {
   spatialSignatures,
 } from './spatialSignature';
 import { motionSignatures, sampleCueMotion } from './motionEnvelope';
+import { formationSignatures } from './formationSignature';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(15);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(16);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -56,7 +57,14 @@ describe('cinematicScore', () => {
         cue.media.depth,
         cue.media.drift,
         cue.media.tintStrength,
-        ...Object.values(cue.composition),
+        cue.composition.coreScale,
+        cue.composition.growthScale,
+        cue.composition.chartScale,
+        cue.composition.ribbonLift,
+        cue.composition.glassSpread,
+        cue.composition.heroX,
+        cue.composition.heroY,
+        cue.composition.heroYaw,
         ...cue.spatial.silkDepth,
         cue.spatial.glassDepthOffset,
         cue.spatial.glassDepthSpread,
@@ -304,6 +312,15 @@ describe('cinematicScore', () => {
     expect(reveal.arrival).toBeGreaterThan(hold.arrival);
     expect(reveal.impact).toBeGreaterThan(hold.impact);
     expect(reveal.overshoot).toBeGreaterThan(hold.overshoot);
+  });
+
+  it('authors a distinct formation signature for every show beat', () => {
+    const signatures = omniVyxCinematicShow.cueOrder.map(
+      (eventId) => getCinematicCue(eventId).composition.signature,
+    );
+
+    expect(signatures).toEqual(formationSignatures);
+    expect(new Set(signatures).size).toBe(signatures.length);
   });
 
   it('authors a distinct settled-scene signature for every show beat', () => {

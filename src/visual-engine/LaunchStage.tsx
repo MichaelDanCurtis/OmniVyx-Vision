@@ -44,6 +44,10 @@ import {
 import { sceneSignatureIndex, sceneSignatureShader } from './sceneSignature';
 import { resolveWorldFocusDistance } from './spatialSignature';
 import {
+  formationSignatureIndex,
+  getStageFormation,
+} from './formationSignature';
+import {
   decayImpulse,
   sampleCameraShotArc,
   sampleCueHandoff,
@@ -151,6 +155,7 @@ export function LaunchStage({
   const stageRef = useRef<HTMLElement>(null);
   const copyMotionRef = useRef<HTMLDivElement>(null);
   const cue = getCinematicCue(state.activeEvent);
+  const formation = getStageFormation(cue.composition.signature);
   // Freeze the sampled presenter pace for this cue so a decaying waveform cannot retime it mid-transition.
   const cuePace = useMemo(
     () => resolveCuePace(
@@ -233,6 +238,11 @@ export function LaunchStage({
       data-motion-impact-amplitude={cue.transition.motion.impactAmplitude.toFixed(2)}
       data-motion-overshoot-amplitude={cue.transition.motion.overshootAmplitude.toFixed(2)}
       data-typography-signature={cue.copy.signature}
+      data-formation-signature={cue.composition.signature}
+      data-formation-glass={`${formation.glass.corridor.toFixed(2)},${formation.glass.convergence.toFixed(2)}`}
+      data-formation-hero={formation.hero.aspect.map((value) => value.toFixed(2)).join(',')}
+      data-formation-silk={formation.silk.span.map((value) => value.toFixed(2)).join(',')}
+      data-formation-network={formation.network.offset.map((value) => value.toFixed(2)).join(',')}
       data-glass-instances={OPTICAL_PANEL_LAYOUT.length}
       data-silk-draws="2"
       data-silk-profile="anisotropic-weave-v2"
@@ -2178,6 +2188,8 @@ function SilkField({
 }) {
   const meshRef = useRef<Mesh>(null);
   const materialRef = useRef<ShaderMaterial>(null);
+  const formation = getStageFormation(cue.composition.signature);
+  const layerIndex = foreground ? 1 : 0;
   const paletteTargets = useMemo(
     () => ({
       primary: new Color(cue.palette.primary),
@@ -2243,11 +2255,12 @@ function SilkField({
       damping + 1.4,
       delta,
     );
+    const baseOpacity = cue.composition.chartScale > 0.5
+      ? (foreground ? 0.38 : 0.72)
+      : (foreground ? 0.88 : 1.08);
     materialRef.current.uniforms.uOpacity.value = MathUtils.damp(
       materialRef.current.uniforms.uOpacity.value,
-      (cue.composition.chartScale > 0.5
-        ? (foreground ? 0.38 : 0.72)
-        : (foreground ? 0.88 : 1.08))
+      baseOpacity * formation.silk.opacity[layerIndex]
         + motion.voiceImpulse * 0.06
         + motion.voiceLevel * 0.06
         + motion.impact * 0.05,
@@ -2262,6 +2275,7 @@ function SilkField({
       meshRef.current.position.y,
       (foreground ? 0.72 : 0.05)
         + cue.composition.ribbonLift * (foreground ? 0.72 : 0.18)
+        + formation.silk.lift[layerIndex]
         + motion.overshoot * (foreground ? 0.16 : 0.05),
       damping,
       delta,
@@ -2278,6 +2292,24 @@ function SilkField({
       meshRef.current.position.z,
       cue.spatial.silkDepth[foreground ? 1 : 0]
         + motion.voiceImpulse * cue.spatial.parallax * (foreground ? 0.08 : -0.03),
+      damping,
+      delta,
+    );
+    meshRef.current.rotation.y = MathUtils.damp(
+      meshRef.current.rotation.y,
+      formation.silk.yaw[layerIndex],
+      damping,
+      delta,
+    );
+    meshRef.current.rotation.z = MathUtils.damp(
+      meshRef.current.rotation.z,
+      formation.silk.roll[layerIndex],
+      damping,
+      delta,
+    );
+    meshRef.current.scale.x = MathUtils.damp(
+      meshRef.current.scale.x,
+      formation.silk.span[layerIndex],
       damping,
       delta,
     );
@@ -2354,6 +2386,7 @@ const opticalArrayFragmentShader = /* glsl */ `
 function OpticalArray({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
   const arrayRef = useRef<InstancedMesh>(null);
   const materialRef = useRef<ShaderMaterial>(null);
+  const formation = getStageFormation(cue.composition.signature);
   const panels = useMemo(
     () => OPTICAL_PANEL_LAYOUT.map((layout) => {
       const panel = new Object3D();
@@ -2406,13 +2439,20 @@ function OpticalArray({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
     const energy = cue.motionEnergy;
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     const chartYield = cue.composition.chartScale > 0.5 ? 0.82 : 1;
-    panels.forEach((panel, index) => {
+    const panelMidpoint = (OPTICAL_PANEL_LAYOUT.length - 1) * 0.5;
+    for (let index = 0; index < panels.length; index += 1) {
+      const panel = panels[index];
       const layout = OPTICAL_PANEL_LAYOUT[index];
       const panelTime = elapsed + layout.phase;
-      const direction = (index - (OPTICAL_PANEL_LAYOUT.length - 1) * 0.5) / 3;
+      const direction = (index - panelMidpoint) / panelMidpoint;
+      const baseX = layout.position[0] * cue.composition.glassSpread;
+      const anchorX = cue.composition.heroX
+        + direction * (1.18 + Math.abs(baseX) * 0.16);
+      const corridorY = formation.glass.lift + direction * 0.72;
+      const arcY = formation.glass.arc * (1 - direction * direction);
       panel.position.x = MathUtils.damp(
         panel.position.x,
-        layout.position[0] * cue.composition.glassSpread
+        MathUtils.lerp(baseX, anchorX, formation.glass.convergence)
           + Math.sin(panelTime * 0.19) * 0.08 * energy
           + direction * motion.impact * 0.24,
         damping,
@@ -2420,7 +2460,8 @@ function OpticalArray({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
       );
       panel.position.y = MathUtils.damp(
         panel.position.y,
-        layout.position[1]
+        MathUtils.lerp(layout.position[1], corridorY, formation.glass.corridor)
+          + arcY
           + Math.sin(panelTime * 0.41) * 0.14 * energy
           + motion.overshoot * direction * 0.09,
         damping,
@@ -2428,7 +2469,9 @@ function OpticalArray({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
       );
       panel.position.z = MathUtils.damp(
         panel.position.z,
-        layout.position[2] * cue.spatial.glassDepthSpread
+        layout.position[2]
+          * cue.spatial.glassDepthSpread
+          * formation.glass.depthScale
           + cue.spatial.glassDepthOffset
           + Math.cos(panelTime * 0.17) * 0.12 * energy
           + direction * motion.overshoot * cue.spatial.parallax * 0.18,
@@ -2444,6 +2487,7 @@ function OpticalArray({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
       panel.rotation.y = MathUtils.damp(
         panel.rotation.y,
         layout.rotation[1]
+          + direction * formation.glass.yaw
           + Math.sin(panelTime * 0.29) * 0.07 * energy
           + direction * motion.impact * 0.08,
         damping,
@@ -2451,15 +2495,27 @@ function OpticalArray({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
       );
       panel.rotation.z = MathUtils.damp(
         panel.rotation.z,
-        layout.rotation[2] + Math.sin(panelTime * 0.16) * 0.025 * energy,
+        layout.rotation[2]
+          + direction * formation.glass.yaw * 0.18
+          + Math.sin(panelTime * 0.16) * 0.025 * energy,
         damping,
         delta,
       );
-      panel.scale.x = MathUtils.damp(panel.scale.x, layout.scale[0] * chartYield, damping, delta);
-      panel.scale.y = MathUtils.damp(panel.scale.y, layout.scale[1] * chartYield, damping, delta);
+      panel.scale.x = MathUtils.damp(
+        panel.scale.x,
+        layout.scale[0] * chartYield * formation.glass.scale,
+        damping,
+        delta,
+      );
+      panel.scale.y = MathUtils.damp(
+        panel.scale.y,
+        layout.scale[1] * chartYield * formation.glass.scale,
+        damping,
+        delta,
+      );
       panel.updateMatrix();
       arrayRef.current?.setMatrixAt(index, panel.matrix);
-    });
+    }
     arrayRef.current.instanceMatrix.needsUpdate = true;
     paletteTargets.primary.set(cue.palette.primary);
     paletteTargets.secondary.set(cue.palette.secondary);
@@ -2467,12 +2523,14 @@ function OpticalArray({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
     materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
     materialRef.current.uniforms.uOpacity.value = MathUtils.damp(
       materialRef.current.uniforms.uOpacity.value,
-      0.52
-        + energy * 0.12
-        + motion.impact * 0.1
-        + motion.voiceImpulse * 0.08
-        + motion.voiceLevel * 0.11
-        + motion.voicePeak * 0.03,
+      formation.glass.opacity * (
+        0.78
+          + energy * 0.12
+          + motion.impact * 0.1
+          + motion.voiceImpulse * 0.08
+          + motion.voiceLevel * 0.11
+          + motion.voicePeak * 0.03
+      ),
       damping,
       delta,
     );
@@ -2868,6 +2926,9 @@ const opticalCoreFragmentShader = /* glsl */ `
   uniform vec3 uAccent;
   uniform float uAssembly;
   uniform float uEnergy;
+  uniform float uFormationFrom;
+  uniform float uFormationMix;
+  uniform float uFormationTo;
   uniform float uImpact;
   uniform float uOpacity;
   uniform vec3 uPrimary;
@@ -2889,6 +2950,64 @@ const opticalCoreFragmentShader = /* glsl */ `
   float angularPulse(float angle, float center, float width) {
     float delta = abs(atan(sin(angle - center), cos(angle - center)));
     return 1.0 - smoothstep(width * 0.45, width, delta);
+  }
+
+  float sampleCoreFormation(
+    float formation,
+    vec2 point,
+    float radius,
+    float angle,
+    float time,
+    float assembly,
+    float aperture,
+    float ringOne,
+    float ringTwo,
+    float ringThree,
+    float lensRim,
+    float centralHalo,
+    float pulse
+  ) {
+    if (formation < 0.5) {
+      float sonarFront = angularPulse(angle, time * 0.82, 0.34)
+        * ringBand(radius, 0.27 + sin(time * 0.7) * 0.035, 0.012);
+      return ringOne * 0.82 + ringTwo * 0.5 + sonarFront * 1.25;
+    }
+    if (formation < 1.5) {
+      float irisBlades = pow(max(cos(angle * 8.0 - time * 1.15), 0.0), 18.0)
+        * smoothstep(0.08, 0.2, radius)
+        * (1.0 - smoothstep(0.31, 0.41, radius));
+      return aperture * 0.48 + irisBlades * 1.35 + lensRim * 0.42;
+    }
+    if (formation < 2.5) {
+      float vectorRail = exp(-pow(point.y - point.x * 0.3, 2.0) * 1500.0);
+      float returnRail = exp(-pow(point.y - point.x * 0.3 + 0.105, 2.0) * 1100.0);
+      float vectorPulse = pow(0.5 + 0.5 * cos((point.x + point.y) * 42.0 - time * 3.2), 14.0);
+      return vectorRail * (0.55 + vectorPulse * 0.8) + returnRail * 0.36 + ringTwo * 0.2;
+    }
+    if (formation < 3.5) {
+      float livingTrace = exp(-pow(
+        point.x - sin(point.y * 8.0 + time * 0.8) * 0.045,
+        2.0
+      ) * 1900.0);
+      float livingForks = pow(0.5 + 0.5 * cos(angle * 7.0 + radius * 28.0), 14.0)
+        * smoothstep(0.12, 0.35, radius);
+      return livingTrace * 0.72 + livingForks * 0.48 + centralHalo * 0.45;
+    }
+    if (formation < 4.5) {
+      float gridX = pow(0.5 + 0.5 * cos(point.x * 78.0), 22.0);
+      float gridY = pow(0.5 + 0.5 * cos(point.y * 62.0), 22.0);
+      float dataSweep = exp(-pow(point.y - sin(time * 0.7) * 0.26, 2.0) * 850.0);
+      return (gridX + gridY) * 0.18 + dataSweep * 0.92 + ringThree * 0.22;
+    }
+    if (formation < 5.5) {
+      return ringTwo * 0.48 + ringThree * 0.16 + centralHalo * (0.3 + pulse * 0.18);
+    }
+
+    float convergedBeams = pow(max(cos(angle * 4.0 - time * 0.18), 0.0), 24.0)
+      * smoothstep(0.05, 0.2, radius)
+      * (1.0 - smoothstep(0.34, 0.44, radius));
+    float convergenceFront = ringBand(radius, 0.12 + (1.0 - assembly) * 0.16, 0.014);
+    return convergedBeams * 1.18 + convergenceFront * 0.9 + centralHalo * 0.62;
   }
 
   void main() {
@@ -2939,6 +3058,44 @@ const opticalCoreFragmentShader = /* glsl */ `
       * ringBand(radius, 0.348, 0.012);
     float facet = sin(angle * 6.0 + radius * 38.0 - time * 0.8) * 0.5 + 0.5;
     float pulse = 0.5 + 0.5 * sin(uTime * 0.64 + radius * 20.0);
+    float formationMotif = sampleCoreFormation(
+      uFormationTo,
+      point,
+      radius,
+      angle,
+      time,
+      assembly,
+      aperture,
+      ringOne,
+      ringTwo,
+      ringThree,
+      lensRim,
+      centralHalo,
+      pulse
+    );
+    if (uFormationMix < 0.999) {
+      float previousFormationMotif = sampleCoreFormation(
+        uFormationFrom,
+        point,
+        radius,
+        angle,
+        time,
+        assembly,
+        aperture,
+        ringOne,
+        ringTwo,
+        ringThree,
+        lensRim,
+        centralHalo,
+        pulse
+      );
+      formationMotif = mix(
+        previousFormationMotif,
+        formationMotif,
+        smoothstep(0.0, 1.0, uFormationMix)
+      );
+    }
+    aperture = mix(aperture, formationMotif, 0.74);
 
     vec3 color = uSurface * (0.42 + cavity * 0.12);
     color = mix(color, uPrimary * (0.09 + facet * 0.025), cavity * lensFalloff);
@@ -2977,6 +3134,9 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
   const finMaterialRef = useRef<MeshPhysicalMaterial>(null);
   const prismRef = useRef<Mesh>(null);
   const prismMaterialRef = useRef<MeshPhysicalMaterial>(null);
+  const formation = getStageFormation(cue.composition.signature);
+  const formationIndex = formationSignatureIndex(cue.composition.signature);
+  const formationTargetRef = useRef(formationIndex);
   const fins = useMemo(
     () => OPTICAL_CORE_FIN_LAYOUT.map(() => new Object3D()),
     [],
@@ -2994,6 +3154,9 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
     uAccent: { value: new Color(cue.palette.accent) },
     uAssembly: { value: 0 },
     uEnergy: { value: cue.motionEnergy },
+    uFormationFrom: { value: formationIndex },
+    uFormationMix: { value: 1 },
+    uFormationTo: { value: formationIndex },
     uImpact: { value: 0 },
     uOpacity: { value: 0.82 },
     uPrimary: { value: new Color(cue.palette.primary) },
@@ -3016,6 +3179,14 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
     });
     finsRef.current.instanceMatrix.needsUpdate = true;
   }, [fins]);
+
+  useEffect(() => {
+    if (!faceMaterialRef.current) return;
+    faceMaterialRef.current.uniforms.uFormationFrom.value = formationTargetRef.current;
+    faceMaterialRef.current.uniforms.uFormationTo.value = formationIndex;
+    faceMaterialRef.current.uniforms.uFormationMix.value = 0;
+    formationTargetRef.current = formationIndex;
+  }, [formationIndex]);
 
   useFrame(({ clock }, delta) => {
     if (!groupRef.current || !faceMaterialRef.current || !finsRef.current) return;
@@ -3061,29 +3232,47 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
     );
     groupRef.current.rotation.x = MathUtils.damp(
       groupRef.current.rotation.x,
-      -0.04 + (cue.composition.coreScale - 0.9) * 0.08 + motion.impact * 0.055,
+      -0.04
+        + formation.hero.tilt[0]
+        + (cue.composition.coreScale - 0.9) * 0.08
+        + motion.impact * 0.055,
       damping,
       delta,
     );
     groupRef.current.rotation.z = MathUtils.damp(
       groupRef.current.rotation.z,
-      (cue.composition.coreScale - 0.9) * -0.12,
+      formation.hero.tilt[1] + (cue.composition.coreScale - 0.9) * -0.12,
       damping,
       delta,
     );
-    const scale = MathUtils.damp(
+    const responsiveScale = cue.composition.coreScale * (
+      1
+      + motion.overshoot * 0.08
+      + motion.voiceImpulse * 0.035
+      + motion.voiceLevel * 0.028
+    );
+    groupRef.current.scale.x = MathUtils.damp(
       groupRef.current.scale.x,
-      cue.composition.coreScale * (
-        1
-        + motion.overshoot * 0.08
-        + motion.voiceImpulse * 0.035
-        + motion.voiceLevel * 0.028
-      ),
+      responsiveScale * formation.hero.aspect[0],
       damping,
       delta,
     );
-    groupRef.current.scale.setScalar(scale);
-    groupRef.current.visible = scale > 0.075;
+    groupRef.current.scale.y = MathUtils.damp(
+      groupRef.current.scale.y,
+      responsiveScale * formation.hero.aspect[1],
+      damping,
+      delta,
+    );
+    groupRef.current.scale.z = MathUtils.damp(
+      groupRef.current.scale.z,
+      responsiveScale * formation.hero.aspect[2],
+      damping,
+      delta,
+    );
+    groupRef.current.visible = Math.max(
+      groupRef.current.scale.x,
+      groupRef.current.scale.y,
+    ) > 0.075;
 
     paletteTargets.primary.set(cue.palette.primary);
     paletteTargets.secondary.set(cue.palette.secondary);
@@ -3168,6 +3357,11 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
     faceUniformValues.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
     faceUniformValues.uSurface.value.lerp(paletteTargets.surface, paletteAlpha);
     faceUniformValues.uTime.value = elapsed;
+    faceUniformValues.uFormationMix.value = MathUtils.smoothstep(
+      motion.actorArrival,
+      0.04,
+      0.96,
+    );
     faceUniformValues.uEnergy.value = MathUtils.damp(
       faceUniformValues.uEnergy.value,
       cue.motionEnergy,
@@ -3204,6 +3398,7 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
     const railExpansion = (1 - assembly) * 0.075
       + cue.motionEnergy * 0.02
       + motion.impact * 0.045
+      + formation.hero.finSpread * 0.32
       + voice * 0.012;
     for (let index = 0; index < fins.length; index += 1) {
       const fin = fins[index];
@@ -3218,6 +3413,7 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
         + motion.impact * 0.045
         + Math.sin(elapsed * 0.36 + layout.phase) * 0.008 * cue.motionEnergy;
       fin.rotation.z = layout.rotation
+        + formation.hero.finTwist * 0.18 * (index % 2 === 0 ? -1 : 1)
         + Math.sin(elapsed * 0.28 + layout.phase) * 0.025 * cue.motionEnergy;
       const revealScale = 0.46 + assembly * 0.54;
       fin.scale.set(
@@ -3496,6 +3692,7 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
   const groupRef = useRef<Group>(null);
   const lineMaterialRef = useRef<ShaderMaterial>(null);
   const pointsMaterialRef = useRef<ShaderMaterial>(null);
+  const formation = getStageFormation(cue.composition.signature);
   const targetPrimary = useMemo(() => new Color(cue.palette.primary), []);
   const targetSecondary = useMemo(() => new Color(cue.palette.secondary), []);
   const targetAccent = useMemo(() => new Color(cue.palette.accent), []);
@@ -3535,19 +3732,43 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
         + motion.voiceCadence * 0.12,
     );
     const actorPresence = MathUtils.smoothstep(cue.composition.growthScale, 0.08, 0.24);
-    const scale = MathUtils.damp(
+    const responsiveScale = cue.composition.growthScale * (
+      1
+      + motion.overshoot * 0.07
+      + motion.voiceImpulse * 0.025
+      + motion.voiceLevel * 0.03
+    );
+    groupRef.current.scale.x = MathUtils.damp(
       groupRef.current.scale.x,
-      cue.composition.growthScale * (
-        1
-        + motion.overshoot * 0.07
-        + motion.voiceImpulse * 0.025
-        + motion.voiceLevel * 0.03
-      ),
+      responsiveScale * formation.network.aspect[0],
       damping,
       delta,
     );
-    groupRef.current.scale.setScalar(scale);
+    groupRef.current.scale.y = MathUtils.damp(
+      groupRef.current.scale.y,
+      responsiveScale * formation.network.aspect[1],
+      damping,
+      delta,
+    );
+    groupRef.current.scale.z = MathUtils.damp(
+      groupRef.current.scale.z,
+      responsiveScale,
+      damping,
+      delta,
+    );
     const elapsed = clock.getElapsedTime();
+    groupRef.current.position.x = MathUtils.damp(
+      groupRef.current.position.x,
+      2 + formation.network.offset[0],
+      damping,
+      delta,
+    );
+    groupRef.current.position.y = MathUtils.damp(
+      groupRef.current.position.y,
+      -1.12 + formation.network.offset[1],
+      damping,
+      delta,
+    );
     groupRef.current.position.z = MathUtils.damp(
       groupRef.current.position.z,
       cue.spatial.networkDepth
@@ -3557,7 +3778,8 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
       delta,
     );
     groupRef.current.rotation.y = Math.sin(elapsed * 0.16) * 0.1 * cue.motionEnergy;
-    groupRef.current.rotation.z = Math.sin(elapsed * 0.11) * 0.018 * cue.motionEnergy;
+    groupRef.current.rotation.z = formation.network.rotation
+      + Math.sin(elapsed * 0.11) * 0.018 * cue.motionEnergy;
     targetPrimary.set(cue.palette.primary);
     targetSecondary.set(cue.palette.secondary);
     targetAccent.set(cue.palette.accent);
@@ -3583,7 +3805,9 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
     pointsMaterialRef.current.uniforms.uEnergy.value = cue.motionEnergy + voice * 0.32;
     pointsMaterialRef.current.uniforms.uReveal.value = motion.actorArrival;
     const pointScaleUniform = pointsMaterialRef.current.uniforms.uScale;
-    if (pointScaleUniform) pointScaleUniform.value = scale;
+    if (pointScaleUniform) {
+      pointScaleUniform.value = (groupRef.current.scale.x + groupRef.current.scale.y) * 0.5;
+    }
     const pointOpacity = MathUtils.damp(
       pointsMaterialRef.current.uniforms.uOpacity.value,
       (0.86 + motion.impact * 0.08 + voice * 0.1) * actorPresence,
@@ -3591,7 +3815,10 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
       delta,
     );
     pointsMaterialRef.current.uniforms.uOpacity.value = pointOpacity;
-    groupRef.current.visible = scale > 0.075 && Math.max(lineOpacity, pointOpacity) > 0.004;
+    groupRef.current.visible = Math.max(
+      groupRef.current.scale.x,
+      groupRef.current.scale.y,
+    ) > 0.075 && Math.max(lineOpacity, pointOpacity) > 0.004;
   });
 
   return (
