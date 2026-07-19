@@ -194,6 +194,8 @@ export function LaunchStage({
       data-shot-dolly={cue.camera.shot.positionArc[2].toFixed(2)}
       data-shot-roll={cue.camera.shot.roll.toFixed(3)}
       data-glass-instances={OPTICAL_PANEL_LAYOUT.length}
+      data-silk-draws="2"
+      data-silk-profile="anisotropic-weave-v2"
       data-optical-core-draws={OPTICAL_CORE_DRAW_CALLS}
       data-optical-core-fins={OPTICAL_CORE_FIN_LAYOUT.length}
       data-optical-handoff-budget="1"
@@ -1488,7 +1490,11 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
 const silkVertexShader = /* glsl */ `
   uniform float uTime;
   uniform float uEnergy;
+  uniform float uLayer;
+  uniform float uVoice;
   varying vec2 vUv;
+  varying float vFold;
+  varying float vTension;
   varying float vWave;
   varying vec3 vNormal;
   varying vec3 vView;
@@ -1496,21 +1502,43 @@ const silkVertexShader = /* glsl */ `
   void main() {
     vUv = uv;
     vec3 displaced = position;
-    float broad = sin(position.x * 0.72 + uTime * 0.38) * 0.52;
-    float crossWave = cos(position.y * 1.16 - uTime * 0.29) * 0.28;
-    float fold = sin(position.x * 1.74 + position.y * 0.64 - uTime * 0.52) * 0.13;
-    float wave = broad + crossWave + fold;
-    float amplitude = 0.42 + uEnergy * 0.22;
+    float direction = mix(1.0, -1.0, uLayer);
+    float broadPhase = position.x * (0.58 + uLayer * 0.12)
+      + position.y * (0.08 + uLayer * 0.14)
+      + uTime * (0.24 + uLayer * 0.08) * direction
+      + uLayer * 2.1;
+    float crossPhase = position.y * (1.04 + uLayer * 0.18)
+      - uTime * (0.2 + uLayer * 0.07)
+      + uLayer * 1.4;
+    float diagonalPhase = position.x * (1.42 - uLayer * 0.18)
+      + position.y * (0.68 + uLayer * 0.22)
+      - uTime * (0.34 + uLayer * 0.11)
+      + uLayer * 0.7;
+    float pleatPhase = position.x * (3.1 + uLayer * 0.45)
+      - position.y * 0.2
+      + uTime * 0.19 * direction;
+    float broad = sin(broadPhase) * 0.54;
+    float crossWave = cos(crossPhase) * 0.25;
+    float diagonal = sin(diagonalPhase) * 0.14;
+    float pleat = sin(pleatPhase) * (0.035 + uEnergy * 0.025);
+    float wave = broad + crossWave + diagonal + pleat;
+    float amplitude = 0.4 + uEnergy * 0.2 + uVoice * 0.035;
     displaced.z += wave * amplitude;
-    displaced.y += sin(position.x * 0.46 - uTime * 0.2) * 0.13 * uEnergy;
+    displaced.y += sin(position.x * 0.46 - uTime * 0.18 + uLayer * 1.6)
+      * 0.11 * uEnergy;
 
-    float waveDx = cos(position.x * 0.72 + uTime * 0.38) * 0.3744
-      + cos(position.x * 1.74 + position.y * 0.64 - uTime * 0.52) * 0.2262;
-    float waveDy = -sin(position.y * 1.16 - uTime * 0.29) * 0.3248
-      + cos(position.x * 1.74 + position.y * 0.64 - uTime * 0.52) * 0.0832;
+    float waveDx = cos(broadPhase) * 0.54 * (0.58 + uLayer * 0.12)
+      + cos(diagonalPhase) * 0.14 * (1.42 - uLayer * 0.18)
+      + cos(pleatPhase) * (0.035 + uEnergy * 0.025) * (3.1 + uLayer * 0.45);
+    float waveDy = cos(broadPhase) * 0.54 * (0.08 + uLayer * 0.14)
+      - sin(crossPhase) * 0.25 * (1.04 + uLayer * 0.18)
+      + cos(diagonalPhase) * 0.14 * (0.68 + uLayer * 0.22)
+      - cos(pleatPhase) * (0.035 + uEnergy * 0.025) * 0.2;
     vec3 foldedNormal = normalize(vec3(-waveDx * amplitude, -waveDy * amplitude, 1.0));
 
     vec4 worldPosition = modelMatrix * vec4(displaced, 1.0);
+    vFold = broad + diagonal;
+    vTension = clamp(abs(waveDx) * 0.72 + abs(waveDy) * 0.46, 0.0, 1.0);
     vWave = wave;
     vNormal = normalize(normalMatrix * foldedNormal);
     vView = normalize(cameraPosition - worldPosition.xyz);
@@ -1519,30 +1547,60 @@ const silkVertexShader = /* glsl */ `
 `;
 
 const silkFragmentShader = /* glsl */ `
+  uniform float uTime;
   uniform float uOpacity;
+  uniform float uLayer;
+  uniform float uVoice;
   uniform vec3 uPrimary;
   uniform vec3 uSecondary;
   uniform vec3 uAccent;
   uniform vec3 uSurface;
   varying vec2 vUv;
+  varying float vFold;
+  varying float vTension;
   varying float vWave;
   varying vec3 vNormal;
   varying vec3 vView;
 
   void main() {
-    float ridge = smoothstep(0.12, 0.86, abs(vWave));
-    float facing = abs(dot(normalize(vNormal), normalize(vView)));
-    float sheen = pow(1.0 - facing, 2.2);
-    float highlight = pow(max(dot(normalize(vNormal), normalize(vec3(-0.3, 0.55, 1.0))), 0.0), 7.0);
-    float colorShift = smoothstep(0.12, 0.9, vUv.x + vWave * 0.14);
-    vec3 iridescence = mix(uPrimary, uAccent, colorShift);
-    vec3 color = mix(uSurface, iridescence, ridge * 0.58 + sheen * 0.46);
-    color = mix(color, uSecondary, highlight * 0.52 + sheen * ridge * 0.28);
+    vec3 normal = normalize(vNormal);
+    vec3 viewDirection = normalize(vView);
+    vec3 keyLight = normalize(vec3(-0.34 + uLayer * 0.58, 0.62, 0.92));
+    vec3 halfVector = normalize(keyLight + viewDirection);
+    float facing = abs(dot(normal, viewDirection));
+    float ridge = smoothstep(0.1, 0.82, abs(vFold));
+    float grazingSheen = pow(1.0 - facing, 1.65);
+    float broadSpecular = pow(max(dot(normal, halfVector), 0.0), 4.5);
+    float tightSpecular = pow(max(dot(normal, halfVector), 0.0), 18.0);
+
+    float warp = pow(0.5 + 0.5 * sin(vUv.x * 96.0 + vUv.y * 7.0 + vWave * 5.0), 9.0);
+    float weft = pow(0.5 + 0.5 * sin(vUv.y * 72.0 - vUv.x * 4.0 - vWave * 3.0), 11.0);
+    float weave = warp * 0.68 + weft * 0.32;
+    float film = 0.5 + 0.5 * cos(
+      (1.0 - facing) * 8.4 + vWave * 1.65 + uLayer * 2.35 + uTime * 0.025
+    );
+    float colorShift = clamp(vUv.x * 0.72 + film * 0.28 + vFold * 0.12, 0.0, 1.0);
+    vec3 spectral = mix(uPrimary, uAccent, colorShift);
+    spectral = mix(spectral, uSecondary, film * (0.16 + grazingSheen * 0.2));
+
+    float foldLight = ridge * 0.38 + broadSpecular * 0.42 + grazingSheen * 0.48;
+    vec3 color = mix(uSurface, spectral, 0.24 + foldLight);
+    color = mix(color, uSecondary, tightSpecular * (0.46 + uVoice * 0.1));
+    color += spectral * weave * (0.025 + vTension * 0.04);
+    color += vec3(1.0, 0.985, 0.95) * tightSpecular * weave * 0.12;
+    color *= 0.82 + smoothstep(-0.68, 0.72, vFold) * 0.2;
+
     float edgeFade = smoothstep(0.0, 0.18, vUv.x)
       * (1.0 - smoothstep(0.82, 1.0, vUv.x))
       * smoothstep(0.0, 0.16, vUv.y)
       * (1.0 - smoothstep(0.84, 1.0, vUv.y));
-    float alpha = (0.2 + ridge * 0.34 + sheen * 0.34) * edgeFade * uOpacity;
+    float alpha = (
+      0.17
+      + ridge * 0.24
+      + grazingSheen * 0.29
+      + broadSpecular * 0.2
+      + weave * vTension * 0.05
+    ) * edgeFade * uOpacity;
     gl_FragColor = vec4(color, alpha);
   }
 `;
@@ -1571,6 +1629,8 @@ function SilkField({
     () => ({
       uTime: { value: 0 },
       uEnergy: { value: cue.motionEnergy },
+      uLayer: { value: foreground ? 1 : 0 },
+      uVoice: { value: 0 },
       uOpacity: { value: foreground ? 0.9 : 1.05 },
       uPrimary: { value: new Color(cue.palette.primary) },
       uSecondary: { value: new Color(cue.palette.secondary) },
@@ -1597,6 +1657,15 @@ function SilkField({
         + motion.voiceLevel * 0.36
         + motion.voicePeak * 0.08,
       damping,
+      delta,
+    );
+    materialRef.current.uniforms.uVoice.value = MathUtils.damp(
+      materialRef.current.uniforms.uVoice.value,
+      Math.min(
+        1.35,
+        motion.voiceLevel * 0.76 + motion.voicePeak * 0.34 + motion.voiceImpulse * 0.28,
+      ),
+      damping + 1.4,
       delta,
     );
     materialRef.current.uniforms.uOpacity.value = MathUtils.damp(
