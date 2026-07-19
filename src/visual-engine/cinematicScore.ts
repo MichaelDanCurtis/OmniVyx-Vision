@@ -236,8 +236,8 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
           fovArc: -2.2,
         },
         portrait: {
-          targetOffset: [0.95, -0.12, 0],
-          pullback: 1.6,
+          targetOffset: [1.12, -0.12, 0],
+          pullback: 2,
         },
       },
       transition: {

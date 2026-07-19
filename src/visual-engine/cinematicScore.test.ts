@@ -126,6 +126,13 @@ describe('cinematicScore', () => {
     }
   });
 
+  it('keeps the product instrument fully framed in portrait presentation', () => {
+    const reveal = getCinematicCue('reveal_product');
+
+    expect(reveal.camera.portrait.pullback).toBe(2);
+    expect(reveal.camera.portrait.targetOffset[0]).toBeGreaterThan(1);
+  });
+
   it('converts duration into frame-rate-independent exponential damping', () => {
     expect(dampingForDuration(1_000)).toBeCloseTo(Math.log(20), 6);
     expect(dampingForDuration(2_000)).toBeCloseTo(Math.log(20) / 2, 6);

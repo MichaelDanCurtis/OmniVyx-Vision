@@ -110,14 +110,14 @@ const EVIDENCE_CURVE = new CatmullRomCurve3(
 );
 
 const OPTICAL_CORE_FIN_LAYOUT = [
-  { position: [-0.52, 0.82, 0.18], rotation: -0.04, scale: [0.34, 0.035, 0.055], phase: 0 },
-  { position: [0.52, 0.82, 0.18], rotation: 0.04, scale: [0.34, 0.035, 0.055], phase: 0.8 },
-  { position: [-0.52, -0.82, 0.18], rotation: 0.04, scale: [0.34, 0.035, 0.055], phase: 1.6 },
-  { position: [0.52, -0.82, 0.18], rotation: -0.04, scale: [0.34, 0.035, 0.055], phase: 2.4 },
-  { position: [-0.82, -0.52, 0.18], rotation: 0.04, scale: [0.035, 0.34, 0.055], phase: 3.2 },
-  { position: [-0.82, 0.52, 0.18], rotation: -0.04, scale: [0.035, 0.34, 0.055], phase: 4 },
-  { position: [0.82, -0.52, 0.18], rotation: -0.04, scale: [0.035, 0.34, 0.055], phase: 4.8 },
-  { position: [0.82, 0.52, 0.18], rotation: 0.04, scale: [0.035, 0.34, 0.055], phase: 5.6 },
+  { position: [-0.52, 0.82, 0.16], rotation: Math.PI / 2 - 0.04, scale: [0.18, 0.34, 0.22], phase: 0 },
+  { position: [0.52, 0.82, 0.16], rotation: Math.PI / 2 + 0.04, scale: [0.18, 0.34, 0.22], phase: 0.8 },
+  { position: [-0.52, -0.82, 0.16], rotation: Math.PI / 2 + 0.04, scale: [0.18, 0.34, 0.22], phase: 1.6 },
+  { position: [0.52, -0.82, 0.16], rotation: Math.PI / 2 - 0.04, scale: [0.18, 0.34, 0.22], phase: 2.4 },
+  { position: [-0.82, -0.52, 0.16], rotation: 0.04, scale: [0.18, 0.34, 0.22], phase: 3.2 },
+  { position: [-0.82, 0.52, 0.16], rotation: -0.04, scale: [0.18, 0.34, 0.22], phase: 4 },
+  { position: [0.82, -0.52, 0.16], rotation: -0.04, scale: [0.18, 0.34, 0.22], phase: 4.8 },
+  { position: [0.82, 0.52, 0.16], rotation: 0.04, scale: [0.18, 0.34, 0.22], phase: 5.6 },
 ] as const;
 
 const OPTICAL_CORE_DRAW_CALLS = 4;
@@ -2174,41 +2174,78 @@ const opticalCoreFragmentShader = /* glsl */ `
 
   void main() {
     vec2 point = vUv - 0.5;
-    float panel = 1.0 - smoothstep(-0.004, 0.008, roundedBoxDistance(point, vec2(0.485), 0.075));
+    float panelDistance = roundedBoxDistance(point, vec2(0.485), 0.075);
+    float panel = 1.0 - smoothstep(-0.004, 0.008, panelDistance);
     if (panel < 0.003) discard;
 
     float radius = length(point);
     float angle = atan(point.y, point.x);
     float time = uTime * (0.13 + uEnergy * 0.035);
     float assembly = smoothstep(0.04, 0.92, uAssembly);
-    float ringOne = ringBand(radius, 0.145 + sin(time * 0.8) * 0.004, 0.0065);
-    float ringTwo = ringBand(radius, 0.245, 0.0075);
-    float ringThree = ringBand(radius, 0.355 + sin(time * 0.55) * 0.006, 0.0055);
+    float cavityDistance = roundedBoxDistance(point, vec2(0.415), 0.105);
+    float cavity = 1.0 - smoothstep(-0.002, 0.014, cavityDistance);
+    float cavityRim = 1.0 - smoothstep(0.002, 0.016, abs(cavityDistance));
+    float edge = 1.0 - smoothstep(0.008, 0.04, abs(panelDistance));
+    float ringOne = ringBand(radius, 0.132 + sin(time * 0.8) * 0.004, 0.006);
+    float ringTwo = ringBand(radius, 0.225, 0.007);
+    float ringThree = ringBand(radius, 0.318 + sin(time * 0.55) * 0.006, 0.0055);
+    float ringFour = ringBand(radius, 0.386, 0.0035);
     float segmentOne = angularPulse(angle, time * 0.72, 0.82);
     float segmentTwo = angularPulse(angle, -time * 0.54 + 2.35, 0.64);
     float segmentThree = angularPulse(angle, time * 0.38 - 2.15, 0.52);
     float aperture = ringOne * (0.42 + segmentOne * 0.58)
       + ringTwo * (0.24 + segmentTwo * 0.76)
-      + ringThree * segmentThree;
+      + ringThree * segmentThree
+      + ringFour * (0.08 + segmentOne * 0.2);
 
     float sweepPosition = sin(time * 0.46) * 0.34;
     float sweep = exp(-pow(point.x + point.y * 0.28 - sweepPosition, 2.0) * 180.0);
+    float broadSweep = exp(-pow(point.x * 0.78 + point.y * 0.42 - sweepPosition, 2.0) * 16.0);
     float interference = sin((point.x + point.y) * 82.0 - time * 2.1)
       * sin((point.x - point.y) * 59.0 + time * 1.4) * 0.5 + 0.5;
-    float lens = exp(-radius * radius * 13.0);
-    float horizon = exp(-pow(point.y + 0.02, 2.0) * 150.0) * (0.25 + sweep * 0.75);
-    float centralHalo = exp(-radius * radius * 58.0);
+    float lens = 1.0 - smoothstep(0.27, 0.32, radius);
+    float lensFalloff = exp(-radius * radius * 14.0);
+    float lensRim = ringBand(radius, 0.294, 0.008);
+    float iris = (1.0 - smoothstep(0.13, 0.27, radius))
+      * (0.45 + 0.55 * pow(0.5 + 0.5 * cos(angle * 12.0 - time * 1.8), 8.0));
+    float depthDisc = exp(-radius * radius * 38.0);
+    float centralHalo = exp(-radius * radius * 72.0);
+    float centralVoid = 1.0 - smoothstep(0.025, 0.085, radius);
+    float horizon = exp(-pow(point.y + 0.018, 2.0) * 210.0) * (0.2 + sweep * 0.8);
+    float traceOne = exp(-pow(point.y - sin(point.x * 5.0 + time) * 0.018, 2.0) * 4200.0)
+      * smoothstep(0.2, 0.42, abs(point.x));
+    float traceTwo = exp(-pow(point.x + cos(point.y * 5.0 - time * 0.8) * 0.014, 2.0) * 5200.0)
+      * smoothstep(0.22, 0.42, abs(point.y));
+    float microTicks = pow(0.5 + 0.5 * cos(angle * 48.0 + time * 0.44), 18.0)
+      * ringBand(radius, 0.348, 0.012);
+    float facet = sin(angle * 6.0 + radius * 38.0 - time * 0.8) * 0.5 + 0.5;
     float pulse = 0.5 + 0.5 * sin(uTime * 0.64 + radius * 20.0);
 
-    vec3 color = mix(uSurface * 0.58, uPrimary * 0.16, lens);
-    color += uPrimary * aperture * (0.6 + uVoice * 0.34) * assembly;
-    color += uSecondary * (sweep * 0.18 + horizon * 0.12) * (0.45 + assembly * 0.55);
-    color += uAccent * (ringThree * segmentThree * 0.72 + centralHalo * (0.22 + pulse * 0.12));
-    color += mix(uPrimary, uAccent, vUv.x) * interference * lens * 0.035;
-    color += uSecondary * uImpact * centralHalo * 0.34;
+    vec3 color = uSurface * (0.42 + cavity * 0.12);
+    color = mix(color, uPrimary * (0.09 + facet * 0.025), cavity * lensFalloff);
+    color += uPrimary * (aperture * (0.68 + uVoice * 0.36) + lensRim * 0.26) * assembly;
+    color += uSecondary * (
+      broadSweep * 0.075
+      + sweep * 0.22
+      + horizon * 0.16
+      + cavityRim * 0.12
+      + traceOne * 0.2
+      + traceTwo * 0.14
+    ) * (0.48 + assembly * 0.52);
+    color += uAccent * (
+      ringThree * segmentThree * 0.78
+      + iris * 0.09
+      + microTicks * 0.2
+      + centralHalo * (0.32 + pulse * 0.16)
+    );
+    color += mix(uPrimary, uAccent, facet) * interference * lens * 0.055;
+    color += mix(uSecondary, uAccent, vUv.x) * depthDisc * (0.06 + uVoice * 0.045);
+    color += uSecondary * uImpact * centralHalo * 0.42;
+    color *= 1.0 - centralVoid * 0.34;
+    color += uAccent * centralVoid * (0.08 + uImpact * 0.22);
+    color += mix(uPrimary, uSecondary, vUv.y) * edge * (0.09 + broadSweep * 0.12);
 
-    float edge = smoothstep(0.46, 0.5, max(abs(point.x), abs(point.y)));
-    float alpha = panel * uOpacity * (0.72 + lens * 0.12 + edge * 0.08);
+    float alpha = panel * uOpacity * (0.76 + cavity * 0.12 + lens * 0.06 + edge * 0.05);
     gl_FragColor = vec4(color, alpha);
   }
 `;
@@ -2334,11 +2371,35 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
         damping,
         delta,
       );
+      shellMaterialRef.current.roughness = MathUtils.damp(
+        shellMaterialRef.current.roughness,
+        0.15 - cue.motionEnergy * 0.025 - motion.impact * 0.02 - voice * 0.008,
+        damping,
+        delta,
+      );
+      shellMaterialRef.current.iridescence = MathUtils.damp(
+        shellMaterialRef.current.iridescence,
+        0.3 + cue.motionEnergy * 0.16 + voice * 0.07,
+        damping,
+        delta,
+      );
     }
     if (finMaterialRef.current) {
       finMaterialRef.current.emissiveIntensity = MathUtils.damp(
         finMaterialRef.current.emissiveIntensity,
         0.22 + cue.motionEnergy * 0.2 + motion.impact * 0.6 + voice * 0.28,
+        damping,
+        delta,
+      );
+      finMaterialRef.current.roughness = MathUtils.damp(
+        finMaterialRef.current.roughness,
+        0.14 - cue.motionEnergy * 0.03 - motion.impact * 0.018,
+        damping,
+        delta,
+      );
+      finMaterialRef.current.iridescence = MathUtils.damp(
+        finMaterialRef.current.iridescence,
+        0.24 + cue.motionEnergy * 0.14 + voice * 0.06,
         damping,
         delta,
       );
@@ -2351,6 +2412,18 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
           + motion.voiceImpulse * 0.46
           + motion.voiceLevel * 0.55
           + motion.voicePeak * 0.22,
+        damping,
+        delta,
+      );
+      prismMaterialRef.current.roughness = MathUtils.damp(
+        prismMaterialRef.current.roughness,
+        0.11 - cue.motionEnergy * 0.025 - motion.impact * 0.018,
+        damping,
+        delta,
+      );
+      prismMaterialRef.current.iridescence = MathUtils.damp(
+        prismMaterialRef.current.iridescence,
+        0.54 + cue.motionEnergy * 0.18 + voice * 0.08,
         damping,
         delta,
       );
@@ -2428,7 +2501,7 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
       prismRef.current.rotation.x = 0.38 + Math.sin(elapsed * 0.24) * 0.1;
       prismRef.current.rotation.y += delta * (0.16 + cue.motionEnergy * 0.22 + voice * 0.08);
       prismRef.current.rotation.z = 0.18 + Math.sin(elapsed * 0.31) * 0.12;
-      prismRef.current.position.z = 0.235 + motion.impact * 0.06 + voice * 0.012;
+      prismRef.current.position.z = 0.21 + motion.impact * 0.06 + voice * 0.012;
       const prismScale = 0.88 + motion.impact * 0.14 + voice * 0.07;
       prismRef.current.scale.setScalar(prismScale);
     }
@@ -2441,19 +2514,23 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
       scale={cue.composition.coreScale}
       visible={cue.composition.coreScale > 0.075}
     >
-      <RoundedBox args={[1.86, 1.86, 0.34]} radius={0.25} smoothness={6} position={[0, 0, -0.04]}>
+      <RoundedBox args={[1.88, 1.88, 0.28]} radius={0.3} smoothness={8} position={[0, 0, -0.04]}>
         <meshPhysicalMaterial
           ref={shellMaterialRef}
           clearcoat={1}
+          clearcoatRoughness={0.08}
           color={cue.palette.surface}
           emissive={cue.palette.primary}
           emissiveIntensity={0.02}
+          iridescence={0.42}
+          iridescenceIOR={1.36}
+          iridescenceThicknessRange={[180, 460]}
           metalness={0.88}
-          roughness={0.16}
+          roughness={0.13}
         />
       </RoundedBox>
-      <mesh position={[0, 0, 0.15]} renderOrder={7}>
-        <planeGeometry args={[1.56, 1.56]} />
+      <mesh position={[0, 0, 0.125]} renderOrder={7}>
+        <planeGeometry args={[1.64, 1.64]} />
         <shaderMaterial
           ref={faceMaterialRef}
           args={[{
@@ -2471,27 +2548,36 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
         args={[undefined, undefined, OPTICAL_CORE_FIN_LAYOUT.length]}
         frustumCulled={false}
       >
-        <boxGeometry args={[1, 1, 1]} />
+        <capsuleGeometry args={[0.08, 0.84, 4, 8]} />
         <meshPhysicalMaterial
           ref={finMaterialRef}
           clearcoat={1}
+          clearcoatRoughness={0.06}
           color={cue.palette.secondary}
           emissive={cue.palette.primary}
           emissiveIntensity={0.22}
+          iridescence={0.34}
+          iridescenceIOR={1.32}
+          iridescenceThicknessRange={[150, 380]}
           metalness={0.72}
-          roughness={0.17}
+          roughness={0.12}
         />
       </instancedMesh>
-      <mesh ref={prismRef} position={[0, 0, 0.235]} rotation={[0.38, 0.42, 0.18]}>
-        <octahedronGeometry args={[0.17, 0]} />
+      <mesh ref={prismRef} position={[0, 0, 0.21]} rotation={[0.38, 0.42, 0.18]}>
+        <icosahedronGeometry args={[0.16, 0]} />
         <meshPhysicalMaterial
           ref={prismMaterialRef}
           clearcoat={1}
+          clearcoatRoughness={0.04}
           color={cue.palette.accent}
           emissive={cue.palette.accent}
           emissiveIntensity={0.16}
+          flatShading
+          iridescence={0.68}
+          iridescenceIOR={1.44}
+          iridescenceThicknessRange={[180, 520]}
           metalness={0.72}
-          roughness={0.13}
+          roughness={0.09}
         />
       </mesh>
     </group>
