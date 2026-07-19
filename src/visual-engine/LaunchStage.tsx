@@ -28,6 +28,7 @@ import {
   PointLight,
   PointsMaterial,
   ShaderMaterial,
+  Vector2,
   Vector3,
 } from 'three';
 import { getCinematicCue, type CinematicCue } from './cinematicScore';
@@ -123,6 +124,10 @@ export function LaunchStage({
       data-lens-bokeh={cue.lens.bokehScale.toFixed(2)}
       data-lens-exposure={cue.lens.exposure.toFixed(2)}
       data-lens-focus-range={cue.lens.focusRange.toFixed(2)}
+      data-world-drift={cue.environment.drift.toFixed(2)}
+      data-world-glow={cue.environment.glow.toFixed(2)}
+      data-world-grid={cue.environment.grid.toFixed(2)}
+      data-world-ribbons={cue.environment.ribbons.toFixed(2)}
       data-draw-calls={renderTelemetry.calls}
       data-pixel-ratio={renderTelemetry.pixelRatio.toFixed(2)}
       data-triangles={renderTelemetry.triangles}
@@ -865,9 +870,93 @@ function phaseDamping(base: number, arrival: number): number {
   return arrival <= 0 ? 0 : base * (0.32 + arrival * 1.08);
 }
 
+const worldVertexShader = /* glsl */ `
+  varying vec3 vDirection;
+
+  void main() {
+    vDirection = normalize(position);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const worldFragmentShader = /* glsl */ `
+  uniform vec3 uAccent;
+  uniform float uDrift;
+  uniform float uGlow;
+  uniform vec2 uGlowPosition;
+  uniform float uGrid;
+  uniform float uHorizon;
+  uniform vec3 uPrimary;
+  uniform float uRibbons;
+  uniform vec3 uSecondary;
+  uniform vec3 uSurface;
+  uniform float uTime;
+  uniform float uVoice;
+  varying vec3 vDirection;
+
+  const float PI = 3.14159265359;
+
+  void main() {
+    vec3 direction = normalize(vDirection);
+    vec2 field = vec2(
+      atan(direction.z, direction.x) / PI,
+      asin(clamp(direction.y, -1.0, 1.0)) / (PI * 0.5)
+    );
+    float time = uTime * (0.018 + uDrift * 0.055);
+    vec2 glowDelta = (field - uGlowPosition) * vec2(1.16, 1.0);
+    float studioGlow = exp(-dot(glowDelta, glowDelta) * 3.8) * uGlow;
+    float horizonCenter = -0.12 + sin(field.x * 4.2 + time * 1.7) * 0.055;
+    float horizon = exp(-pow(field.y - horizonCenter, 2.0) * 19.0) * uHorizon;
+    float ribbonWave = 0.5 + 0.5 * sin(
+      field.x * 10.0
+      + sin(field.y * 7.0 - time * 2.1) * 2.0
+      + time * 2.8
+    );
+    float ribbon = pow(smoothstep(0.58, 1.0, ribbonWave), 2.0)
+      * smoothstep(-0.86, 0.72, field.y)
+      * uRibbons;
+    float gridX = pow(1.0 - abs(sin((field.x + time * 0.08) * PI * 12.0)), 28.0);
+    float gridY = pow(1.0 - abs(sin((field.y - time * 0.04) * PI * 8.0)), 28.0);
+    float gridMask = smoothstep(-0.74, 0.48, field.y) * (1.0 - smoothstep(0.62, 0.96, field.y));
+    float grid = (gridX + gridY) * gridMask * uGrid;
+    float interference = 0.5 + 0.5 * sin(
+      field.x * 21.0
+      - field.y * 13.0
+      + sin(field.y * 9.0 + time) * 1.8
+    );
+    float voiceLift = 1.0 + uVoice * 0.22;
+    vec3 color = uSurface * (0.72 + interference * 0.08);
+    color += uPrimary * (studioGlow * 0.2 + horizon * 0.13 + ribbon * 0.09) * voiceLift;
+    color += uAccent * (studioGlow * 0.08 + ribbon * 0.12 + horizon * 0.035) * voiceLift;
+    color += uSecondary * grid * 0.055;
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
 function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
+  const worldMaterialRef = useRef<ShaderMaterial>(null);
+  const particleGroupRef = useRef<Group>(null);
   const pointsMaterialRef = useRef<PointsMaterial>(null);
-  const targetColor = useMemo(() => new Color(cue.palette.primary), []);
+  const paletteTargets = useMemo(() => ({
+    accent: new Color(cue.palette.accent),
+    primary: new Color(cue.palette.primary),
+    secondary: new Color(cue.palette.secondary),
+    surface: new Color(cue.palette.surface),
+  }), []);
+  const worldUniforms = useMemo(() => ({
+    uAccent: { value: new Color(cue.palette.accent) },
+    uDrift: { value: cue.environment.drift },
+    uGlow: { value: cue.environment.glow },
+    uGlowPosition: { value: new Vector2(...cue.environment.glowPosition) },
+    uGrid: { value: cue.environment.grid },
+    uHorizon: { value: cue.environment.horizon },
+    uPrimary: { value: new Color(cue.palette.primary) },
+    uRibbons: { value: cue.environment.ribbons },
+    uSecondary: { value: new Color(cue.palette.secondary) },
+    uSurface: { value: new Color(cue.palette.surface) },
+    uTime: { value: 0 },
+    uVoice: { value: 0 },
+  }), []);
   const particles = useMemo(() => {
     const positions: number[] = [];
     for (let index = 0; index < 120; index += 1) {
@@ -878,26 +967,84 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
     return new Float32Array(positions);
   }, []);
 
-  useFrame((_, delta) => {
-    if (!pointsMaterialRef.current) return;
+  useFrame(({ clock }, delta) => {
+    if (!worldMaterialRef.current || !particleGroupRef.current || !pointsMaterialRef.current) return;
     const damping = phaseDamping(cue.transition.damping, motion.mediaArrival);
-    targetColor.set(cue.palette.primary);
+    const paletteAlpha = 1 - Math.exp(-damping * delta);
+    const elapsed = clock.getElapsedTime();
+    const voice = Math.min(1.4, motion.voiceLevel + motion.voiceImpulse * 0.42 + motion.voicePeak * 0.28);
+    paletteTargets.primary.set(cue.palette.primary);
+    paletteTargets.secondary.set(cue.palette.secondary);
+    paletteTargets.accent.set(cue.palette.accent);
+    paletteTargets.surface.set(cue.palette.surface);
+    worldMaterialRef.current.uniforms.uPrimary.value.lerp(paletteTargets.primary, paletteAlpha);
+    worldMaterialRef.current.uniforms.uSecondary.value.lerp(paletteTargets.secondary, paletteAlpha);
+    worldMaterialRef.current.uniforms.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
+    worldMaterialRef.current.uniforms.uSurface.value.lerp(paletteTargets.surface, paletteAlpha);
+    worldMaterialRef.current.uniforms.uTime.value = elapsed;
+    worldMaterialRef.current.uniforms.uVoice.value = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uVoice.value,
+      voice,
+      voice > worldMaterialRef.current.uniforms.uVoice.value ? 14 : 4.4,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uGlow.value = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uGlow.value,
+      cue.environment.glow + motion.impact * 0.08 + voice * 0.12,
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uHorizon.value = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uHorizon.value,
+      cue.environment.horizon + voice * 0.07,
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uRibbons.value = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uRibbons.value,
+      cue.environment.ribbons + voice * 0.13,
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uGrid.value = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uGrid.value,
+      cue.environment.grid,
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uDrift.value = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uDrift.value,
+      cue.environment.drift + voice * 0.06,
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uGlowPosition.value.x = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uGlowPosition.value.x,
+      cue.environment.glowPosition[0],
+      damping,
+      delta,
+    );
+    worldMaterialRef.current.uniforms.uGlowPosition.value.y = MathUtils.damp(
+      worldMaterialRef.current.uniforms.uGlowPosition.value.y,
+      cue.environment.glowPosition[1],
+      damping,
+      delta,
+    );
+    particleGroupRef.current.rotation.y = elapsed * cue.environment.drift * 0.012;
+    particleGroupRef.current.rotation.z = Math.sin(elapsed * 0.04) * cue.environment.drift * 0.025;
     pointsMaterialRef.current.color.lerp(
-      targetColor,
-      1 - Math.exp(-damping * delta),
+      paletteTargets.primary,
+      paletteAlpha,
     );
     pointsMaterialRef.current.opacity = MathUtils.damp(
       pointsMaterialRef.current.opacity,
-      0.3
-        + motion.impact * 0.16
-        + motion.voiceImpulse * 0.1
-        + motion.voiceLevel * 0.1,
+      cue.environment.particles + motion.impact * 0.1 + voice * 0.12,
       damping,
       delta,
     );
     pointsMaterialRef.current.size = MathUtils.damp(
       pointsMaterialRef.current.size,
-      0.018 + motion.voiceImpulse * 0.006 + motion.voicePeak * 0.008,
+      cue.environment.particleSize + motion.voiceImpulse * 0.004 + motion.voicePeak * 0.006,
       damping,
       delta,
     );
@@ -907,21 +1054,27 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
     <>
       <mesh scale={[30, 30, 30]}>
         <sphereGeometry args={[1, 32, 32]} />
-        <meshBasicMaterial color="#050914" side={BackSide} />
-      </mesh>
-      <points>
-        <bufferGeometry>
-          <bufferAttribute attach="attributes-position" args={[particles, 3]} />
-        </bufferGeometry>
-        <pointsMaterial
-          ref={pointsMaterialRef}
-          color={cue.palette.primary}
-          opacity={0.34}
-          size={0.018}
-          sizeAttenuation
-          transparent
+        <shaderMaterial
+          ref={worldMaterialRef}
+          args={[{ uniforms: worldUniforms, vertexShader: worldVertexShader, fragmentShader: worldFragmentShader }]}
+          side={BackSide}
         />
-      </points>
+      </mesh>
+      <group ref={particleGroupRef}>
+        <points>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[particles, 3]} />
+          </bufferGeometry>
+          <pointsMaterial
+            ref={pointsMaterialRef}
+            color={cue.palette.primary}
+            opacity={cue.environment.particles}
+            size={cue.environment.particleSize}
+            sizeAttenuation
+            transparent
+          />
+        </points>
+      </group>
     </>
   );
 }

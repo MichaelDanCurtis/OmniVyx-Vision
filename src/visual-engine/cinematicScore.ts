@@ -54,6 +54,16 @@ export interface CinematicCue {
     rim: number;
     accent: number;
   };
+  environment: {
+    glow: number;
+    glowPosition: Vector2Tuple;
+    horizon: number;
+    ribbons: number;
+    grid: number;
+    particles: number;
+    particleSize: number;
+    drift: number;
+  };
   lens: {
     bloom: number;
     focusDistance: number;
@@ -73,7 +83,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 5;
+  schemaVersion: 6;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -91,7 +101,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -138,6 +148,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: 0.08,
       },
       lighting: { key: 1.85, rim: 3.8, accent: 2.6 },
+      environment: {
+        glow: 0.32,
+        glowPosition: [0.24, 0.16],
+        horizon: 0.38,
+        ribbons: 0.18,
+        grid: 0.03,
+        particles: 0.26,
+        particleSize: 0.018,
+        drift: 0.1,
+      },
       lens: {
         bloom: 0.42,
         focusDistance: 6.4,
@@ -197,6 +217,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: -0.2,
       },
       lighting: { key: 2.7, rim: 5.2, accent: 3.4 },
+      environment: {
+        glow: 0.62,
+        glowPosition: [0.3, 0.12],
+        horizon: 0.52,
+        ribbons: 0.44,
+        grid: 0.04,
+        particles: 0.38,
+        particleSize: 0.021,
+        drift: 0.26,
+      },
       lens: {
         bloom: 0.62,
         focusDistance: 5.9,
@@ -256,6 +286,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: 0.16,
       },
       lighting: { key: 2.25, rim: 4.4, accent: 4.2 },
+      environment: {
+        glow: 0.48,
+        glowPosition: [-0.08, 0.12],
+        horizon: 0.36,
+        ribbons: 0.3,
+        grid: 0.18,
+        particles: 0.3,
+        particleSize: 0.018,
+        drift: 0.18,
+      },
       lens: {
         bloom: 0.46,
         focusDistance: 6.2,
@@ -315,6 +355,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: -0.12,
       },
       lighting: { key: 2.05, rim: 3.6, accent: 3.1 },
+      environment: {
+        glow: 0.58,
+        glowPosition: [0.36, 0.14],
+        horizon: 0.44,
+        ribbons: 0.72,
+        grid: 0.02,
+        particles: 0.5,
+        particleSize: 0.021,
+        drift: 0.22,
+      },
       lens: {
         bloom: 0.44,
         focusDistance: 5.8,
@@ -374,6 +424,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: 0.2,
       },
       lighting: { key: 2.4, rim: 4.8, accent: 4.6 },
+      environment: {
+        glow: 0.3,
+        glowPosition: [0.5, 0.3],
+        horizon: 0.24,
+        ribbons: 0.08,
+        grid: 0.58,
+        particles: 0.16,
+        particleSize: 0.014,
+        drift: 0.06,
+      },
       lens: {
         bloom: 0.3,
         focusDistance: 6,
@@ -433,6 +493,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: 0.05,
       },
       lighting: { key: 1.8, rim: 3.1, accent: 2.3 },
+      environment: {
+        glow: 0.18,
+        glowPosition: [0.08, 0.12],
+        horizon: 0.14,
+        ribbons: 0.1,
+        grid: 0,
+        particles: 0.14,
+        particleSize: 0.014,
+        drift: 0.03,
+      },
       lens: {
         bloom: 0.28,
         focusDistance: 6.6,
@@ -492,6 +562,16 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: -0.08,
       },
       lighting: { key: 2.8, rim: 5.3, accent: 3.8 },
+      environment: {
+        glow: 0.68,
+        glowPosition: [0.26, 0.16],
+        horizon: 0.5,
+        ribbons: 0.54,
+        grid: 0.1,
+        particles: 0.4,
+        particleSize: 0.02,
+        drift: 0.18,
+      },
       lens: {
         bloom: 0.58,
         focusDistance: 6.1,

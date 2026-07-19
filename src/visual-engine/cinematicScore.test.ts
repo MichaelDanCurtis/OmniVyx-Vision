@@ -8,7 +8,7 @@ import { stageEvents } from './stageScore';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(5);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(6);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -37,6 +37,14 @@ describe('cinematicScore', () => {
         cue.media.tintStrength,
         ...Object.values(cue.composition),
         ...Object.values(cue.lighting),
+        cue.environment.glow,
+        ...cue.environment.glowPosition,
+        cue.environment.horizon,
+        cue.environment.ribbons,
+        cue.environment.grid,
+        cue.environment.particles,
+        cue.environment.particleSize,
+        cue.environment.drift,
         ...Object.values(cue.lens),
         cue.motionEnergy,
       ];
@@ -64,6 +72,21 @@ describe('cinematicScore', () => {
       expect(cue.media.opacity).toBeGreaterThanOrEqual(0);
       expect(cue.media.opacity).toBeLessThanOrEqual(1);
       expect(cue.media.scale).toBeGreaterThan(0);
+      expect(cue.environment.glow).toBeGreaterThanOrEqual(0);
+      expect(cue.environment.glow).toBeLessThanOrEqual(1);
+      expect(cue.environment.glowPosition.every((value) => value >= -1 && value <= 1)).toBe(true);
+      expect(cue.environment.horizon).toBeGreaterThanOrEqual(0);
+      expect(cue.environment.horizon).toBeLessThanOrEqual(1);
+      expect(cue.environment.ribbons).toBeGreaterThanOrEqual(0);
+      expect(cue.environment.ribbons).toBeLessThanOrEqual(1);
+      expect(cue.environment.grid).toBeGreaterThanOrEqual(0);
+      expect(cue.environment.grid).toBeLessThanOrEqual(1);
+      expect(cue.environment.particles).toBeGreaterThanOrEqual(0);
+      expect(cue.environment.particles).toBeLessThanOrEqual(1);
+      expect(cue.environment.particleSize).toBeGreaterThan(0);
+      expect(cue.environment.particleSize).toBeLessThanOrEqual(0.05);
+      expect(cue.environment.drift).toBeGreaterThanOrEqual(0);
+      expect(cue.environment.drift).toBeLessThanOrEqual(1);
       expect(cue.lens.bloom).toBeGreaterThanOrEqual(0);
       expect(cue.lens.focusDistance).toBeGreaterThan(0);
       expect(cue.lens.focusRange).toBeGreaterThan(0);
@@ -105,5 +128,17 @@ describe('cinematicScore', () => {
     expect(chart.focusRange).toBeGreaterThan(reveal.focusRange);
     expect(chart.bokehScale).toBeLessThan(reveal.bokehScale);
     expect(chart.bloom).toBeLessThan(reveal.bloom);
+  });
+
+  it('authors distinct organic, evidence, quiet, and product worlds', () => {
+    const reveal = getCinematicCue('reveal_product').environment;
+    const growth = getCinematicCue('grow_system').environment;
+    const chart = getCinematicCue('summon_dynamic_chart').environment;
+    const hold = getCinematicCue('hold').environment;
+
+    expect(growth.ribbons).toBeGreaterThan(chart.ribbons);
+    expect(chart.grid).toBeGreaterThan(growth.grid);
+    expect(hold.glow).toBeLessThan(reveal.glow);
+    expect(hold.drift).toBeLessThan(reveal.drift);
   });
 });
