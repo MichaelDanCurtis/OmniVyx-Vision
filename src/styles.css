@@ -810,6 +810,10 @@ textarea::placeholder {
   text-shadow: 0 20px 50px rgba(0, 0, 0, 0.56);
 }
 
+.stage-copy-stack {
+  display: contents;
+}
+
 .visual-engine-copy .eyebrow {
   animation: stageMetaEnter 440ms cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: var(--cue-copy-delay, 80ms);
@@ -831,14 +835,61 @@ textarea::placeholder {
   padding: 0.06em 0;
 }
 
-.stage-copy-line > span {
+.stage-copy-line-inner {
   display: block;
+  white-space: nowrap;
   transform-origin: left bottom;
   animation: stageLineEnter var(--cue-copy-duration, 720ms) cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: calc(
     var(--cue-copy-delay, 80ms) + var(--line-index, 0) * var(--cue-line-stagger, 64ms)
   );
   will-change: opacity, transform, filter;
+}
+
+.stage-copy-word-mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  clip-path: inset(0 100% 0 0);
+  animation: stageWordResolve 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--cue-word-delay, var(--cue-copy-delay, 80ms));
+  will-change: clip-path, opacity;
+}
+
+.stage-copy-word-mask:not(:last-child) {
+  margin-right: 0.22em;
+}
+
+.stage-copy-word {
+  position: relative;
+  display: inline-block;
+  transform: translate3d(0, var(--presenter-word-lift, 0), 0)
+    scale(var(--presenter-word-scale, 1));
+  transform-origin: center bottom;
+  filter: brightness(var(--presenter-word-brightness, 1));
+  transition: transform 110ms linear, filter 110ms linear;
+}
+
+.stage-copy-word::after {
+  content: attr(data-word);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: transparent;
+  background: linear-gradient(
+    102deg,
+    transparent 18%,
+    color-mix(in srgb, white 76%, var(--stage-accent, #fde68a)) 48%,
+    transparent 78%
+  );
+  background-position: calc(
+    var(--presenter-glint-position, 34%) + var(--word-glint-offset, 0%)
+  ) 50%;
+  background-size: 240% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  opacity: var(--presenter-word-glint, 0.08);
+  transition: opacity 110ms linear, background-position 150ms linear;
 }
 
 .visual-engine-copy p:not(.eyebrow) {
@@ -860,8 +911,12 @@ textarea::placeholder {
   animation-duration: 280ms;
 }
 
-.stage-copy-interrupted .stage-copy-line > span {
+.stage-copy-interrupted .stage-copy-line-inner {
   animation-name: stageLineHandoff;
+}
+
+.stage-copy-interrupted .stage-copy-word-mask {
+  animation-duration: 320ms;
 }
 
 .stage-copy-interrupted p:not(.eyebrow) {
@@ -876,7 +931,8 @@ textarea::placeholder {
 }
 
 .stage-copy-outgoing .eyebrow,
-.stage-copy-outgoing .stage-copy-line > span,
+.stage-copy-outgoing .stage-copy-line-inner,
+.stage-copy-outgoing .stage-copy-word-mask,
 .stage-copy-outgoing p:not(.eyebrow) {
   animation: none;
 }
@@ -1037,6 +1093,20 @@ textarea::placeholder {
     opacity: 1;
     filter: blur(0);
     transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes stageWordResolve {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  42% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
   }
 }
 
@@ -1632,7 +1702,11 @@ textarea::placeholder {
   }
 
   .visual-engine-copy .eyebrow,
-  .stage-copy-line > span,
+  .stage-copy-line-inner,
+  .stage-copy-interrupted .stage-copy-line-inner,
+  .stage-copy-word-mask,
+  .stage-copy-word,
+  .stage-copy-word::after,
   .visual-engine-copy p:not(.eyebrow),
   .stage-evidence-readout,
   .stage-evidence-readout::before,

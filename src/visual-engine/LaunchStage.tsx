@@ -60,6 +60,11 @@ import {
 } from './organicNetwork';
 import { resolveCuePace, scaleCueDuration } from './cuePacing';
 import { launchEvidence, normalizeEvidenceValues } from './evidenceScore';
+import {
+  buildKineticHeadline,
+  writeKineticSpeechStyle,
+  type KineticSpeechStyle,
+} from './kineticCopy';
 
 interface StageMotionBus extends CueMotionSample {
   actorArrival: number;
@@ -133,6 +138,7 @@ export function LaunchStage({
   state,
 }: LaunchStageProps) {
   const stageRef = useRef<HTMLElement>(null);
+  const copyMotionRef = useRef<HTMLDivElement>(null);
   const cue = getCinematicCue(state.activeEvent);
   // Freeze the sampled presenter pace for this cue so a decaying waveform cannot retime it mid-transition.
   const cuePace = useMemo(
@@ -246,6 +252,7 @@ export function LaunchStage({
           <TransitionPerformanceRegressor eventId={state.activeEvent} />
           <RenderTelemetryProbe effectsEnabled={effectsEnabled} onChange={setRenderTelemetry} />
           <LaunchScene
+            copyElementRef={copyMotionRef}
             cue={cue}
             effectsEnabled={effectsEnabled}
             presenterEnergy={presenterEnergy}
@@ -257,7 +264,12 @@ export function LaunchStage({
         </PerformanceMonitor>
       </Canvas>
 
-      <KineticStageCopy cue={cue} eventId={state.activeEvent} pace={cuePace} />
+      <KineticStageCopy
+        cue={cue}
+        eventId={state.activeEvent}
+        motionRef={copyMotionRef}
+        pace={cuePace}
+      />
 
       <div
         className="stage-performance"
@@ -299,10 +311,12 @@ interface CopyLayerState {
 function KineticStageCopy({
   cue,
   eventId,
+  motionRef,
   pace,
 }: {
   cue: CinematicCue;
   eventId: StageEventId;
+  motionRef: RefObject<HTMLDivElement | null>;
   pace: number;
 }) {
   const previousRef = useRef({ cue, eventId, pace, startedAtMs: Date.now() });
@@ -334,7 +348,7 @@ function KineticStageCopy({
   }, [cue, eventId, pace]);
 
   return (
-    <>
+    <div className="stage-copy-stack" ref={motionRef}>
       {outgoing ? (
         <StageCopyLayer
           cue={outgoing.cue}
@@ -352,7 +366,7 @@ function KineticStageCopy({
         key={`${eventId}-in`}
         pace={pace}
       />
-    </>
+    </div>
   );
 }
 
@@ -390,16 +404,22 @@ function StageCopyLayer({
   const copyDelayMs = interrupted
     ? clamp(authoredDelayMs * 0.12, 28, 64)
     : authoredDelayMs;
+  const lineStaggerMs = clamp(
+    scaleCueDuration(cue.transition.durationMs * (interrupted ? 0.032 : 0.055), pace),
+    interrupted ? 28 : 42,
+    interrupted ? 52 : 96,
+  );
+  const wordStaggerMs = clamp(lineStaggerMs * (interrupted ? 0.42 : 0.56), 16, 38);
+  const kineticLines = useMemo(
+    () => buildKineticHeadline(cue.copy.headlineLines),
+    [cue.copy.headlineLines],
+  );
   const style = {
     '--cue-copy-duration': `${copyDurationMs}ms`,
     '--cue-copy-delay': `${copyDelayMs}ms`,
     '--cue-copy-x': `${cue.transition.copyOffset[0]}px`,
     '--cue-copy-y': `${cue.transition.copyOffset[1]}px`,
-    '--cue-line-stagger': `${clamp(
-      scaleCueDuration(cue.transition.durationMs * (interrupted ? 0.032 : 0.055), pace),
-      interrupted ? 28 : 42,
-      interrupted ? 52 : 96,
-    )}ms`,
+    '--cue-line-stagger': `${lineStaggerMs}ms`,
     '--cue-body-delay': `${copyDelayMs + (interrupted ? 84 : 180)}ms`,
     '--cue-exit-duration': `${exitDurationMs}ms`,
     '--cue-exit-x': `${cue.transition.copyOffset[0] * -0.32}px`,
@@ -420,9 +440,27 @@ function StageCopyLayer({
     >
       <p className="eyebrow">{cue.copy.eyebrow}</p>
       <h2 aria-label={outgoing ? undefined : cue.copy.headline}>
-        {cue.copy.headlineLines.map((line, index) => (
-          <span className="stage-copy-line" key={line} aria-hidden="true">
-            <span style={{ '--line-index': index } as CSSProperties}>{line}</span>
+        {kineticLines.map((line) => (
+          <span className="stage-copy-line" key={line.text} aria-hidden="true">
+            <span
+              className="stage-copy-line-inner"
+              style={{ '--line-index': line.index } as CSSProperties}
+            >
+              {line.words.map((word) => (
+                <span
+                  className="stage-copy-word-mask"
+                  key={`${word.globalIndex}-${word.text}`}
+                  style={{
+                    '--cue-word-delay': `${copyDelayMs
+                      + line.index * lineStaggerMs
+                      + word.index * wordStaggerMs}ms`,
+                    '--word-glint-offset': `${((word.globalIndex % 4) - 1.5) * 9}%`,
+                  } as CSSProperties}
+                >
+                  <span className="stage-copy-word" data-word={word.text}>{word.text}</span>
+                </span>
+              ))}
+            </span>
           </span>
         ))}
       </h2>
@@ -461,6 +499,7 @@ function EvidenceReadout({ visible }: { visible: boolean }) {
 }
 
 interface LaunchSceneProps {
+  copyElementRef: RefObject<HTMLDivElement | null>;
   cue: CinematicCue;
   effectsEnabled: boolean;
   pace: number;
@@ -471,6 +510,7 @@ interface LaunchSceneProps {
 }
 
 function LaunchScene({
+  copyElementRef,
   cue,
   effectsEnabled,
   pace,
@@ -501,6 +541,7 @@ function LaunchScene({
       <fog attach="fog" args={['#050914', 6.8, 17]} />
       <ambientLight intensity={0.45} />
       <MotionDirector
+        copyElementRef={copyElementRef}
         cue={cue}
         eventId={state.activeEvent}
         motion={motion}
@@ -633,6 +674,7 @@ function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotion
 }
 
 function MotionDirector({
+  copyElementRef,
   cue,
   eventId,
   motion,
@@ -641,6 +683,7 @@ function MotionDirector({
   pace,
   stageElementRef,
 }: {
+  copyElementRef: RefObject<HTMLDivElement | null>;
   cue: CinematicCue;
   eventId: StageEventId;
   motion: StageMotionBus;
@@ -655,6 +698,13 @@ function MotionDirector({
   const lastReportedHandoffRef = useRef(-1);
   const lastReportedPeakRef = useRef(-1);
   const lastReportedProgressRef = useRef(-1);
+  const speechStyle = useMemo<KineticSpeechStyle>(() => ({
+    brightness: '1.000',
+    glint: '0.080',
+    glintPosition: '34%',
+    lift: '0.0000em',
+    scale: '1.0000',
+  }), []);
 
   useEffect(() => {
     const handoff = sampleCueHandoff(motion.progress, motion.elapsedMs, motion.handoff);
@@ -727,14 +777,39 @@ function MotionDirector({
         audioActive ? 'active' : 'idle',
       );
     }
-    if (Math.abs(motion.voiceLevel - lastReportedEnergyRef.current) >= 0.01) {
+    const energyChanged = Math.abs(motion.voiceLevel - lastReportedEnergyRef.current) >= 0.01;
+    const peakChanged = Math.abs(motion.voicePeak - lastReportedPeakRef.current) >= 0.01;
+    if ((energyChanged || peakChanged) && copyElementRef.current) {
+      writeKineticSpeechStyle(motion.voiceLevel, motion.voicePeak, speechStyle);
+      copyElementRef.current.style.setProperty(
+        '--presenter-word-lift',
+        speechStyle.lift,
+      );
+      copyElementRef.current.style.setProperty(
+        '--presenter-word-brightness',
+        speechStyle.brightness,
+      );
+      copyElementRef.current.style.setProperty(
+        '--presenter-word-glint',
+        speechStyle.glint,
+      );
+      copyElementRef.current.style.setProperty(
+        '--presenter-word-scale',
+        speechStyle.scale,
+      );
+      copyElementRef.current.style.setProperty(
+        '--presenter-glint-position',
+        speechStyle.glintPosition,
+      );
+    }
+    if (energyChanged) {
       lastReportedEnergyRef.current = motion.voiceLevel;
       stageElementRef.current.setAttribute(
         'data-presenter-energy',
         motion.voiceLevel.toFixed(2),
       );
     }
-    if (Math.abs(motion.voicePeak - lastReportedPeakRef.current) >= 0.01) {
+    if (peakChanged) {
       lastReportedPeakRef.current = motion.voicePeak;
       stageElementRef.current.setAttribute(
         'data-presenter-peak',
