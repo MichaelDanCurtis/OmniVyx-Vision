@@ -103,6 +103,19 @@ const EVIDENCE_CURVE = new CatmullRomCurve3(
   )),
 );
 
+const OPTICAL_CORE_FIN_LAYOUT = [
+  { position: [-0.52, 0.82, 0.18], rotation: -0.04, scale: [0.34, 0.035, 0.055], phase: 0 },
+  { position: [0.52, 0.82, 0.18], rotation: 0.04, scale: [0.34, 0.035, 0.055], phase: 0.8 },
+  { position: [-0.52, -0.82, 0.18], rotation: 0.04, scale: [0.34, 0.035, 0.055], phase: 1.6 },
+  { position: [0.52, -0.82, 0.18], rotation: -0.04, scale: [0.34, 0.035, 0.055], phase: 2.4 },
+  { position: [-0.82, -0.52, 0.18], rotation: 0.04, scale: [0.035, 0.34, 0.055], phase: 3.2 },
+  { position: [-0.82, 0.52, 0.18], rotation: -0.04, scale: [0.035, 0.34, 0.055], phase: 4 },
+  { position: [0.82, -0.52, 0.18], rotation: -0.04, scale: [0.035, 0.34, 0.055], phase: 4.8 },
+  { position: [0.82, 0.52, 0.18], rotation: 0.04, scale: [0.035, 0.34, 0.055], phase: 5.6 },
+] as const;
+
+const OPTICAL_CORE_DRAW_CALLS = 4;
+
 interface LaunchStageProps {
   presenterEnergy?: PresenterEnergySignal;
   presenterPulse?: number;
@@ -172,6 +185,8 @@ export function LaunchStage({
       data-shot-dolly={cue.camera.shot.positionArc[2].toFixed(2)}
       data-shot-roll={cue.camera.shot.roll.toFixed(3)}
       data-glass-instances={OPTICAL_PANEL_LAYOUT.length}
+      data-optical-core-draws={OPTICAL_CORE_DRAW_CALLS}
+      data-optical-core-fins={OPTICAL_CORE_FIN_LAYOUT.length}
       data-organic-nodes={ORGANIC_NETWORK_NODE_COUNT}
       data-organic-scale={cue.composition.growthScale.toFixed(2)}
       data-evidence-active={state.dynamicChartVisible}
@@ -504,7 +519,7 @@ function LaunchScene({
       <SilkField cue={cue} foreground motion={motion} />
       <OpticalArray cue={cue} motion={motion} />
       <EvidenceField cue={cue} enabled={state.dynamicChartVisible} motion={motion} />
-      <HeroMonolith cue={cue} motion={motion} />
+      <HeroOpticalCore cue={cue} motion={motion} />
       <NetworkBloom cue={cue} motion={motion} />
 
       {effectsEnabled ? <CinematicPost cue={cue} motion={motion} /> : null}
@@ -1958,15 +1973,95 @@ function EvidenceField({
   );
 }
 
-function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
+const opticalCoreVertexShader = /* glsl */ `
+  varying vec2 vUv;
+
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const opticalCoreFragmentShader = /* glsl */ `
+  uniform vec3 uAccent;
+  uniform float uAssembly;
+  uniform float uEnergy;
+  uniform float uImpact;
+  uniform float uOpacity;
+  uniform vec3 uPrimary;
+  uniform vec3 uSecondary;
+  uniform vec3 uSurface;
+  uniform float uTime;
+  uniform float uVoice;
+  varying vec2 vUv;
+
+  float roundedBoxDistance(vec2 point, vec2 bounds, float radius) {
+    vec2 offset = abs(point) - bounds + radius;
+    return min(max(offset.x, offset.y), 0.0) + length(max(offset, 0.0)) - radius;
+  }
+
+  float ringBand(float distanceToCenter, float radius, float width) {
+    return 1.0 - smoothstep(width, width * 2.2, abs(distanceToCenter - radius));
+  }
+
+  float angularPulse(float angle, float center, float width) {
+    float delta = abs(atan(sin(angle - center), cos(angle - center)));
+    return 1.0 - smoothstep(width * 0.45, width, delta);
+  }
+
+  void main() {
+    vec2 point = vUv - 0.5;
+    float panel = 1.0 - smoothstep(-0.004, 0.008, roundedBoxDistance(point, vec2(0.485), 0.075));
+    if (panel < 0.003) discard;
+
+    float radius = length(point);
+    float angle = atan(point.y, point.x);
+    float time = uTime * (0.13 + uEnergy * 0.035);
+    float assembly = smoothstep(0.04, 0.92, uAssembly);
+    float ringOne = ringBand(radius, 0.145 + sin(time * 0.8) * 0.004, 0.0065);
+    float ringTwo = ringBand(radius, 0.245, 0.0075);
+    float ringThree = ringBand(radius, 0.355 + sin(time * 0.55) * 0.006, 0.0055);
+    float segmentOne = angularPulse(angle, time * 0.72, 0.82);
+    float segmentTwo = angularPulse(angle, -time * 0.54 + 2.35, 0.64);
+    float segmentThree = angularPulse(angle, time * 0.38 - 2.15, 0.52);
+    float aperture = ringOne * (0.42 + segmentOne * 0.58)
+      + ringTwo * (0.24 + segmentTwo * 0.76)
+      + ringThree * segmentThree;
+
+    float sweepPosition = sin(time * 0.46) * 0.34;
+    float sweep = exp(-pow(point.x + point.y * 0.28 - sweepPosition, 2.0) * 180.0);
+    float interference = sin((point.x + point.y) * 82.0 - time * 2.1)
+      * sin((point.x - point.y) * 59.0 + time * 1.4) * 0.5 + 0.5;
+    float lens = exp(-radius * radius * 13.0);
+    float horizon = exp(-pow(point.y + 0.02, 2.0) * 150.0) * (0.25 + sweep * 0.75);
+    float centralHalo = exp(-radius * radius * 58.0);
+    float pulse = 0.5 + 0.5 * sin(uTime * 0.64 + radius * 20.0);
+
+    vec3 color = mix(uSurface * 0.58, uPrimary * 0.16, lens);
+    color += uPrimary * aperture * (0.6 + uVoice * 0.34) * assembly;
+    color += uSecondary * (sweep * 0.18 + horizon * 0.12) * (0.45 + assembly * 0.55);
+    color += uAccent * (ringThree * segmentThree * 0.72 + centralHalo * (0.22 + pulse * 0.12));
+    color += mix(uPrimary, uAccent, vUv.x) * interference * lens * 0.035;
+    color += uSecondary * uImpact * centralHalo * 0.34;
+
+    float edge = smoothstep(0.46, 0.5, max(abs(point.x), abs(point.y)));
+    float alpha = panel * uOpacity * (0.72 + lens * 0.12 + edge * 0.08);
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
   const groupRef = useRef<Group>(null);
-  const outerMaterialRef = useRef<MeshPhysicalMaterial>(null);
-  const faceMaterialRef = useRef<MeshPhysicalMaterial>(null);
-  const glassMaterialRef = useRef<MeshPhysicalMaterial>(null);
-  const apertureMaterialRef = useRef<MeshBasicMaterial>(null);
+  const shellMaterialRef = useRef<MeshPhysicalMaterial>(null);
+  const faceMaterialRef = useRef<ShaderMaterial>(null);
+  const finsRef = useRef<InstancedMesh>(null);
+  const finMaterialRef = useRef<MeshPhysicalMaterial>(null);
+  const prismRef = useRef<Mesh>(null);
   const prismMaterialRef = useRef<MeshPhysicalMaterial>(null);
-  const arcMaterialRef = useRef<MeshBasicMaterial>(null);
-  const innerRingMaterialRef = useRef<MeshBasicMaterial>(null);
+  const fins = useMemo(
+    () => OPTICAL_CORE_FIN_LAYOUT.map(() => new Object3D()),
+    [],
+  );
   const paletteTargets = useMemo(
     () => ({
       primary: new Color(cue.palette.primary),
@@ -1976,11 +2071,42 @@ function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
     }),
     [],
   );
+  const faceUniforms = useMemo(() => ({
+    uAccent: { value: new Color(cue.palette.accent) },
+    uAssembly: { value: 0 },
+    uEnergy: { value: cue.motionEnergy },
+    uImpact: { value: 0 },
+    uOpacity: { value: 0.82 },
+    uPrimary: { value: new Color(cue.palette.primary) },
+    uSecondary: { value: new Color(cue.palette.secondary) },
+    uSurface: { value: new Color(cue.palette.surface) },
+    uTime: { value: 0 },
+    uVoice: { value: 0 },
+  }), []);
+
+  useLayoutEffect(() => {
+    if (!finsRef.current) return;
+    finsRef.current.instanceMatrix.setUsage(DynamicDrawUsage);
+    fins.forEach((fin, index) => {
+      const layout = OPTICAL_CORE_FIN_LAYOUT[index];
+      fin.position.set(layout.position[0], layout.position[1], layout.position[2]);
+      fin.rotation.z = layout.rotation;
+      fin.scale.set(layout.scale[0], layout.scale[1], layout.scale[2]);
+      fin.updateMatrix();
+      finsRef.current?.setMatrixAt(index, fin.matrix);
+    });
+    finsRef.current.instanceMatrix.needsUpdate = true;
+  }, [fins]);
 
   useFrame(({ clock }, delta) => {
-    if (!groupRef.current) return;
+    if (!groupRef.current || !faceMaterialRef.current || !finsRef.current) return;
     const damping = phaseDamping(cue.transition.damping, motion.actorArrival, motion.handoff);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
+    const elapsed = clock.getElapsedTime();
+    const voice = Math.min(
+      1.4,
+      motion.voiceLevel + motion.voiceImpulse * 0.5 + motion.voicePeak * 0.22,
+    );
     groupRef.current.position.x = MathUtils.damp(
       groupRef.current.position.x,
       cue.composition.heroX,
@@ -1998,7 +2124,7 @@ function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
     );
     groupRef.current.rotation.y = MathUtils.damp(
       groupRef.current.rotation.y,
-      cue.composition.heroYaw + Math.sin(clock.getElapsedTime() * 0.18) * 0.025 * cue.motionEnergy,
+      cue.composition.heroYaw + Math.sin(elapsed * 0.18) * 0.028 * cue.motionEnergy,
       damping,
       delta,
     );
@@ -2032,34 +2158,24 @@ function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
     paletteTargets.secondary.set(cue.palette.secondary);
     paletteTargets.accent.set(cue.palette.accent);
     paletteTargets.surface.set(cue.palette.surface);
-    outerMaterialRef.current?.color.lerp(paletteTargets.surface, paletteAlpha);
-    faceMaterialRef.current?.color.lerp(paletteTargets.surface, paletteAlpha);
-    glassMaterialRef.current?.color.lerp(paletteTargets.primary, paletteAlpha);
-    apertureMaterialRef.current?.color.lerp(paletteTargets.primary, paletteAlpha);
+    shellMaterialRef.current?.color.lerp(paletteTargets.surface, paletteAlpha);
+    shellMaterialRef.current?.emissive.lerp(paletteTargets.primary, paletteAlpha);
+    finMaterialRef.current?.color.lerp(paletteTargets.secondary, paletteAlpha);
+    finMaterialRef.current?.emissive.lerp(paletteTargets.primary, paletteAlpha);
     prismMaterialRef.current?.color.lerp(paletteTargets.accent, paletteAlpha);
     prismMaterialRef.current?.emissive.lerp(paletteTargets.accent, paletteAlpha);
-    arcMaterialRef.current?.color.lerp(paletteTargets.accent, paletteAlpha);
-    innerRingMaterialRef.current?.color.lerp(paletteTargets.secondary, paletteAlpha);
-    if (glassMaterialRef.current) {
-      glassMaterialRef.current.opacity = MathUtils.damp(
-        glassMaterialRef.current.opacity,
-        0.12
-          + cue.motionEnergy * 0.035
-          + motion.voiceImpulse * 0.025
-          + motion.voiceLevel * 0.025,
+    if (shellMaterialRef.current) {
+      shellMaterialRef.current.emissiveIntensity = MathUtils.damp(
+        shellMaterialRef.current.emissiveIntensity,
+        0.015 + cue.motionEnergy * 0.015 + motion.impact * 0.045 + voice * 0.02,
         damping,
         delta,
       );
     }
-    if (apertureMaterialRef.current) {
-      apertureMaterialRef.current.opacity = MathUtils.damp(
-        apertureMaterialRef.current.opacity,
-        0.42
-          + cue.motionEnergy * 0.12
-          + motion.impact * 0.18
-          + motion.voiceImpulse * 0.1
-          + motion.voiceLevel * 0.12
-          + motion.voicePeak * 0.04,
+    if (finMaterialRef.current) {
+      finMaterialRef.current.emissiveIntensity = MathUtils.damp(
+        finMaterialRef.current.emissiveIntensity,
+        0.22 + cue.motionEnergy * 0.2 + motion.impact * 0.6 + voice * 0.28,
         damping,
         delta,
       );
@@ -2076,6 +2192,83 @@ function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
         delta,
       );
     }
+
+    const faceUniformValues = faceMaterialRef.current.uniforms;
+    faceUniformValues.uPrimary.value.lerp(paletteTargets.primary, paletteAlpha);
+    faceUniformValues.uSecondary.value.lerp(paletteTargets.secondary, paletteAlpha);
+    faceUniformValues.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
+    faceUniformValues.uSurface.value.lerp(paletteTargets.surface, paletteAlpha);
+    faceUniformValues.uTime.value = elapsed;
+    faceUniformValues.uEnergy.value = MathUtils.damp(
+      faceUniformValues.uEnergy.value,
+      cue.motionEnergy,
+      damping,
+      delta,
+    );
+    faceUniformValues.uAssembly.value = MathUtils.damp(
+      faceUniformValues.uAssembly.value,
+      motion.actorArrival,
+      damping,
+      delta,
+    );
+    faceUniformValues.uImpact.value = MathUtils.damp(
+      faceUniformValues.uImpact.value,
+      motion.impact + motion.voiceImpulse * 0.52,
+      damping,
+      delta,
+    );
+    faceUniformValues.uVoice.value = MathUtils.damp(
+      faceUniformValues.uVoice.value,
+      voice,
+      damping,
+      delta,
+    );
+    faceUniformValues.uOpacity.value = MathUtils.damp(
+      faceUniformValues.uOpacity.value,
+      0.8 + cue.motionEnergy * 0.06 + voice * 0.035,
+      damping,
+      delta,
+    );
+    if (!groupRef.current.visible) return;
+
+    const assembly = MathUtils.smoothstep(motion.actorArrival, 0.04, 0.9);
+    const railExpansion = (1 - assembly) * 0.075
+      + cue.motionEnergy * 0.02
+      + motion.impact * 0.045
+      + voice * 0.012;
+    for (let index = 0; index < fins.length; index += 1) {
+      const fin = fins[index];
+      const layout = OPTICAL_CORE_FIN_LAYOUT[index];
+      const railPulse = Math.sin(elapsed * 0.42 + layout.phase) * 0.5 + 0.5;
+      const radialScale = 0.9 + assembly * 0.1;
+      fin.position.x = layout.position[0] * radialScale
+        + Math.sign(layout.position[0]) * (railExpansion + railPulse * 0.007);
+      fin.position.y = layout.position[1] * radialScale
+        + Math.sign(layout.position[1]) * (railExpansion + (1 - railPulse) * 0.007);
+      fin.position.z = layout.position[2]
+        + motion.impact * 0.045
+        + Math.sin(elapsed * 0.36 + layout.phase) * 0.008 * cue.motionEnergy;
+      fin.rotation.z = layout.rotation
+        + Math.sin(elapsed * 0.28 + layout.phase) * 0.025 * cue.motionEnergy;
+      const revealScale = 0.46 + assembly * 0.54;
+      fin.scale.set(
+        layout.scale[0] * revealScale,
+        layout.scale[1] * revealScale,
+        layout.scale[2] * (0.7 + assembly * 0.3),
+      );
+      fin.updateMatrix();
+      finsRef.current?.setMatrixAt(index, fin.matrix);
+    }
+    finsRef.current.instanceMatrix.needsUpdate = true;
+
+    if (prismRef.current) {
+      prismRef.current.rotation.x = 0.38 + Math.sin(elapsed * 0.24) * 0.1;
+      prismRef.current.rotation.y += delta * (0.16 + cue.motionEnergy * 0.22 + voice * 0.08);
+      prismRef.current.rotation.z = 0.18 + Math.sin(elapsed * 0.31) * 0.12;
+      prismRef.current.position.z = 0.235 + motion.impact * 0.06 + voice * 0.012;
+      const prismScale = 0.88 + motion.impact * 0.14 + voice * 0.07;
+      prismRef.current.scale.setScalar(prismScale);
+    }
   });
 
   return (
@@ -2085,47 +2278,49 @@ function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
       scale={cue.composition.coreScale}
       visible={cue.composition.coreScale > 0.075}
     >
-      <RoundedBox args={[1.62, 1.96, 0.24]} radius={0.24} smoothness={5} position={[0, 0, -0.13]}>
+      <RoundedBox args={[1.86, 1.86, 0.34]} radius={0.25} smoothness={6} position={[0, 0, -0.04]}>
         <meshPhysicalMaterial
-          ref={outerMaterialRef}
+          ref={shellMaterialRef}
           clearcoat={1}
           color={cue.palette.surface}
-          metalness={0.82}
-          roughness={0.2}
+          emissive={cue.palette.primary}
+          emissiveIntensity={0.02}
+          metalness={0.88}
+          roughness={0.16}
         />
       </RoundedBox>
-      <RoundedBox args={[1.42, 1.76, 0.28]} radius={0.2} smoothness={5} position={[0, 0, 0.02]}>
-        <meshPhysicalMaterial
+      <mesh position={[0, 0, 0.15]} renderOrder={7}>
+        <planeGeometry args={[1.56, 1.56]} />
+        <shaderMaterial
           ref={faceMaterialRef}
-          clearcoat={1}
-          color={cue.palette.surface}
-          metalness={0.38}
-          roughness={0.11}
-        />
-      </RoundedBox>
-      <RoundedBox args={[1.18, 1.5, 0.055]} radius={0.17} smoothness={4} position={[0, 0, 0.2]}>
-        <meshPhysicalMaterial
-          ref={glassMaterialRef}
-          clearcoat={1}
-          color={cue.palette.primary}
+          args={[{
+            uniforms: faceUniforms,
+            vertexShader: opticalCoreVertexShader,
+            fragmentShader: opticalCoreFragmentShader,
+          }]}
           depthWrite={false}
-          metalness={0.12}
-          opacity={0.14}
-          roughness={0.04}
-          transparent
-        />
-      </RoundedBox>
-      <mesh position={[0, 0, 0.25]}>
-        <torusGeometry args={[0.37, 0.012, 16, 96]} />
-        <meshBasicMaterial
-          ref={apertureMaterialRef}
-          color={cue.palette.primary}
-          opacity={0.54}
+          toneMapped={false}
           transparent
         />
       </mesh>
-      <mesh position={[0, 0, 0.27]} rotation={[0.25, 0.42, 0.16]}>
-        <octahedronGeometry args={[0.15, 0]} />
+      <instancedMesh
+        ref={finsRef}
+        args={[undefined, undefined, OPTICAL_CORE_FIN_LAYOUT.length]}
+        frustumCulled={false}
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <meshPhysicalMaterial
+          ref={finMaterialRef}
+          clearcoat={1}
+          color={cue.palette.secondary}
+          emissive={cue.palette.primary}
+          emissiveIntensity={0.22}
+          metalness={0.72}
+          roughness={0.17}
+        />
+      </instancedMesh>
+      <mesh ref={prismRef} position={[0, 0, 0.235]} rotation={[0.38, 0.42, 0.18]}>
+        <octahedronGeometry args={[0.17, 0]} />
         <meshPhysicalMaterial
           ref={prismMaterialRef}
           clearcoat={1}
@@ -2134,24 +2329,6 @@ function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
           emissiveIntensity={0.16}
           metalness={0.72}
           roughness={0.13}
-        />
-      </mesh>
-      <mesh position={[0, 0, 0.255]} rotation={[0, 0, 0.76]}>
-        <torusGeometry args={[0.58, 0.006, 8, 96, Math.PI * 1.3]} />
-        <meshBasicMaterial
-          ref={arcMaterialRef}
-          color={cue.palette.accent}
-          opacity={0.28}
-          transparent
-        />
-      </mesh>
-      <mesh position={[0, 0, 0.26]}>
-        <torusGeometry args={[0.25, 0.004, 8, 72]} />
-        <meshBasicMaterial
-          ref={innerRingMaterialRef}
-          color={cue.palette.secondary}
-          opacity={0.3}
-          transparent
         />
       </mesh>
     </group>

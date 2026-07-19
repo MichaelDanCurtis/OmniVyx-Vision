@@ -168,6 +168,17 @@ describe('cinematicScore', () => {
     expect(hold.drift).toBeLessThan(reveal.drift);
   });
 
+  it('gives live direction and hold distinct optical-core compositions', () => {
+    const direction = getCinematicCue('explain_value').composition;
+    const hold = getCinematicCue('hold').composition;
+
+    expect(direction.heroYaw).toBeGreaterThan(0.3);
+    expect(direction.heroX).toBeGreaterThan(1.3);
+    expect(hold.coreScale).toBeGreaterThan(0.6);
+    expect(hold.growthScale).toBeLessThan(0.1);
+    expect(hold.glassSpread).toBeLessThan(direction.glassSpread);
+  });
+
   it('authors distinct camera paths for reveal, growth, evidence, and hold', () => {
     const reveal = getCinematicCue('reveal_product').camera.shot;
     const growth = getCinematicCue('grow_system').camera.shot;
