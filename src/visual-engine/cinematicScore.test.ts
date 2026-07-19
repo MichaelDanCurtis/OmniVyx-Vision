@@ -12,10 +12,11 @@ import {
   resolveWorldFocusDistance,
   spatialSignatures,
 } from './spatialSignature';
+import { motionSignatures, sampleCueMotion } from './motionEnvelope';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(14);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(15);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -41,6 +42,12 @@ describe('cinematicScore', () => {
         ...cue.transition.copyOffset,
         cue.transition.sweepAngle,
         cue.transition.sweepIntensity,
+        cue.transition.motion.arrivalPower,
+        cue.transition.motion.impactAmplitude,
+        cue.transition.motion.impactDecay,
+        cue.transition.motion.overshootAmplitude,
+        cue.transition.motion.overshootDecay,
+        cue.transition.motion.overshootSkew,
         ...Object.values(cue.transition.pacing),
         ...Object.values(cue.transition.staging).flat(),
         cue.media.opacity,
@@ -102,6 +109,18 @@ describe('cinematicScore', () => {
       expect(cue.transition.copyDelayMs).toBeGreaterThanOrEqual(0);
       expect(cue.transition.sweepIntensity).toBeGreaterThanOrEqual(0);
       expect(cue.transition.sweepIntensity).toBeLessThanOrEqual(1.2);
+      expect(cue.transition.motion.arrivalPower).toBeGreaterThan(1);
+      expect(cue.transition.motion.arrivalPower).toBeLessThanOrEqual(8);
+      expect(cue.transition.motion.impactAmplitude).toBeGreaterThanOrEqual(0);
+      expect(cue.transition.motion.impactAmplitude).toBeLessThanOrEqual(1.2);
+      expect(cue.transition.motion.impactDecay).toBeGreaterThan(0);
+      expect(cue.transition.motion.impactDecay).toBeLessThanOrEqual(12);
+      expect(cue.transition.motion.overshootAmplitude).toBeGreaterThanOrEqual(0);
+      expect(cue.transition.motion.overshootAmplitude).toBeLessThanOrEqual(1);
+      expect(cue.transition.motion.overshootDecay).toBeGreaterThan(0);
+      expect(cue.transition.motion.overshootDecay).toBeLessThanOrEqual(8);
+      expect(cue.transition.motion.overshootSkew).toBeGreaterThanOrEqual(0.5);
+      expect(cue.transition.motion.overshootSkew).toBeLessThanOrEqual(2);
       expect(cue.transition.pacing.minimumRate).toBeGreaterThan(0);
       expect(cue.transition.pacing.maximumRate).toBeGreaterThanOrEqual(
         cue.transition.pacing.minimumRate,
@@ -261,6 +280,30 @@ describe('cinematicScore', () => {
     expect(new Set(signatures).size).toBe(signatures.length);
     expect(new Set(indices).size).toBe(indices.length);
     expect(indices).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it('authors a distinct temporal signature for every show beat', () => {
+    const signatures = omniVyxCinematicShow.cueOrder.map(
+      (eventId) => getCinematicCue(eventId).transition.motion.signature,
+    );
+    const reveal = sampleCueMotion(
+      300,
+      1_000,
+      undefined,
+      getCinematicCue('reveal_product').transition.motion,
+    );
+    const hold = sampleCueMotion(
+      300,
+      1_000,
+      undefined,
+      getCinematicCue('hold').transition.motion,
+    );
+
+    expect(signatures).toEqual(motionSignatures);
+    expect(new Set(signatures).size).toBe(signatures.length);
+    expect(reveal.arrival).toBeGreaterThan(hold.arrival);
+    expect(reveal.impact).toBeGreaterThan(hold.impact);
+    expect(reveal.overshoot).toBeGreaterThan(hold.overshoot);
   });
 
   it('authors a distinct settled-scene signature for every show beat', () => {

@@ -5,6 +5,36 @@ export interface CueMotionSample {
   overshoot: number;
 }
 
+export const motionSignatures = [
+  'ambient_establish',
+  'precision_reveal',
+  'directed_glide',
+  'organic_unfurl',
+  'evidence_lock',
+  'sustained_breath',
+  'crescendo_converge',
+] as const;
+
+export type MotionSignature = (typeof motionSignatures)[number];
+
+export interface CueMotionProfile {
+  arrivalPower: number;
+  impactAmplitude: number;
+  impactDecay: number;
+  overshootAmplitude: number;
+  overshootDecay: number;
+  overshootSkew: number;
+}
+
+export const defaultCueMotionProfile: CueMotionProfile = {
+  arrivalPower: 4,
+  impactAmplitude: 1,
+  impactDecay: 6,
+  overshootAmplitude: 1,
+  overshootDecay: 2.4,
+  overshootSkew: 1,
+};
+
 export interface CueHandoffSample {
   continuity: number;
   impactScale: number;
@@ -22,6 +52,7 @@ export function sampleCueMotion(
   elapsedMs: number,
   durationMs: number,
   target: CueMotionSample = { progress: 0, arrival: 0, impact: 1, overshoot: 0 },
+  profile: CueMotionProfile = defaultCueMotionProfile,
 ): CueMotionSample {
   if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
     throw new Error('Cue elapsed time must be a non-negative finite number.');
@@ -32,9 +63,13 @@ export function sampleCueMotion(
 
   const progress = Math.min(1, elapsedMs / durationMs);
   target.progress = progress;
-  target.arrival = 1 - Math.pow(1 - progress, 4);
-  target.impact = Math.exp(-progress * 6) * (1 - progress);
-  target.overshoot = Math.sin(progress * Math.PI) * Math.exp(-progress * 2.4);
+  target.arrival = 1 - Math.pow(1 - progress, profile.arrivalPower);
+  target.impact = profile.impactAmplitude
+    * Math.exp(-progress * profile.impactDecay)
+    * (1 - progress);
+  target.overshoot = Math.sin(Math.pow(progress, profile.overshootSkew) * Math.PI)
+    * Math.exp(-progress * profile.overshootDecay)
+    * profile.overshootAmplitude;
   return target;
 }
 

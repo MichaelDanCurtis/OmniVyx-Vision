@@ -1,5 +1,9 @@
 import type { StageEventId } from './stageScore';
-import type { MotionPhaseWindow } from './motionEnvelope';
+import type {
+  CueMotionProfile,
+  MotionPhaseWindow,
+  MotionSignature,
+} from './motionEnvelope';
 import type { CuePacingProfile } from './cuePacing';
 import type { SceneSignature } from './sceneSignature';
 import type { TypographySignature } from './kineticCopy';
@@ -62,6 +66,7 @@ export interface CinematicCue {
     signature: TransitionSignature;
     sweepAngle: number;
     sweepIntensity: number;
+    motion: CueMotionProfile & { signature: MotionSignature };
     pacing: CuePacingProfile;
     staging: {
       camera: MotionPhaseWindow;
@@ -144,7 +149,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 14;
+  schemaVersion: 15;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -162,7 +167,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 14,
+  schemaVersion: 15,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -199,6 +204,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         signature: 'prism_sweep',
         sweepAngle: 0.15,
         sweepIntensity: 0.74,
+        motion: {
+          signature: 'ambient_establish',
+          arrivalPower: 3.2,
+          impactAmplitude: 0.58,
+          impactDecay: 7.2,
+          overshootAmplitude: 0.14,
+          overshootDecay: 3.8,
+          overshootSkew: 1.1,
+        },
         pacing: {
           idleRate: 0.9,
           minimumRate: 0.82,
@@ -317,6 +331,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         signature: 'aperture_reveal',
         sweepAngle: 0,
         sweepIntensity: 0.95,
+        motion: {
+          signature: 'precision_reveal',
+          arrivalPower: 5.4,
+          impactAmplitude: 1.05,
+          impactDecay: 5.2,
+          overshootAmplitude: 0.75,
+          overshootDecay: 2,
+          overshootSkew: 0.82,
+        },
         pacing: {
           idleRate: 1,
           minimumRate: 0.92,
@@ -435,6 +458,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         signature: 'ribbon_fold',
         sweepAngle: 1.15,
         sweepIntensity: 0.8,
+        motion: {
+          signature: 'directed_glide',
+          arrivalPower: 3.8,
+          impactAmplitude: 0.78,
+          impactDecay: 6.1,
+          overshootAmplitude: 0.34,
+          overshootDecay: 2.8,
+          overshootSkew: 1.18,
+        },
         pacing: {
           idleRate: 0.96,
           minimumRate: 0.88,
@@ -553,6 +585,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         signature: 'organic_bloom',
         sweepAngle: -0.55,
         sweepIntensity: 0.88,
+        motion: {
+          signature: 'organic_unfurl',
+          arrivalPower: 2.7,
+          impactAmplitude: 0.64,
+          impactDecay: 4.2,
+          overshootAmplitude: 0.55,
+          overshootDecay: 1.55,
+          overshootSkew: 1.42,
+        },
         pacing: {
           idleRate: 0.88,
           minimumRate: 0.78,
@@ -671,6 +712,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         signature: 'data_scan',
         sweepAngle: 3.1416,
         sweepIntensity: 1.1,
+        motion: {
+          signature: 'evidence_lock',
+          arrivalPower: 6.2,
+          impactAmplitude: 1.08,
+          impactDecay: 7.8,
+          overshootAmplitude: 0.18,
+          overshootDecay: 4.2,
+          overshootSkew: 0.72,
+        },
         pacing: {
           idleRate: 1.06,
           minimumRate: 0.96,
@@ -789,6 +839,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         signature: 'soft_hold',
         sweepAngle: 1.5708,
         sweepIntensity: 0.25,
+        motion: {
+          signature: 'sustained_breath',
+          arrivalPower: 2.2,
+          impactAmplitude: 0.35,
+          impactDecay: 9,
+          overshootAmplitude: 0.08,
+          overshootDecay: 5,
+          overshootSkew: 1.2,
+        },
         pacing: {
           idleRate: 0.82,
           minimumRate: 0.74,
@@ -907,6 +966,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         signature: 'convergence',
         sweepAngle: 0.35,
         sweepIntensity: 1,
+        motion: {
+          signature: 'crescendo_converge',
+          arrivalPower: 4.5,
+          impactAmplitude: 1,
+          impactDecay: 4.6,
+          overshootAmplitude: 0.62,
+          overshootDecay: 1.8,
+          overshootSkew: 1.05,
+        },
         pacing: {
           idleRate: 0.94,
           minimumRate: 0.84,

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   decayImpulse,
+  defaultCueMotionProfile,
+  motionSignatures,
   sampleCameraShotArc,
   sampleCueHandoff,
   sampleCueMotion,
@@ -33,6 +35,31 @@ describe('motionEnvelope', () => {
     expect(sample.impact).toBeGreaterThan(0);
     expect(sample.overshoot).toBeGreaterThan(0);
     expect(sample.overshoot).toBeLessThan(1);
+  });
+
+  it('gives authored temporal signatures distinct acceleration and settle character', () => {
+    const reveal = sampleCueMotion(300, 1_000, undefined, {
+      arrivalPower: 5.4,
+      impactAmplitude: 1.05,
+      impactDecay: 5.2,
+      overshootAmplitude: 0.75,
+      overshootDecay: 2,
+      overshootSkew: 0.82,
+    });
+    const hold = sampleCueMotion(300, 1_000, undefined, {
+      arrivalPower: 2.2,
+      impactAmplitude: 0.35,
+      impactDecay: 9,
+      overshootAmplitude: 0.08,
+      overshootDecay: 5,
+      overshootSkew: 1.2,
+    });
+
+    expect(reveal.arrival).toBeGreaterThan(hold.arrival);
+    expect(reveal.impact).toBeGreaterThan(hold.impact);
+    expect(reveal.overshoot).toBeGreaterThan(hold.overshoot);
+    expect(new Set(motionSignatures).size).toBe(7);
+    expect(defaultCueMotionProfile.arrivalPower).toBe(4);
   });
 
   it('decays voice impulses independently of frame rate', () => {

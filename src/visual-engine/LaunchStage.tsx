@@ -228,6 +228,10 @@ export function LaunchStage({
       data-shot-dolly={cue.camera.shot.positionArc[2].toFixed(2)}
       data-shot-roll={cue.camera.shot.roll.toFixed(3)}
       data-transition-signature={cue.transition.signature}
+      data-motion-signature={cue.transition.motion.signature}
+      data-motion-arrival-power={cue.transition.motion.arrivalPower.toFixed(2)}
+      data-motion-impact-amplitude={cue.transition.motion.impactAmplitude.toFixed(2)}
+      data-motion-overshoot-amplitude={cue.transition.motion.overshootAmplitude.toFixed(2)}
       data-typography-signature={cue.copy.signature}
       data-glass-instances={OPTICAL_PANEL_LAYOUT.length}
       data-silk-draws="2"
@@ -809,7 +813,7 @@ function MotionDirector({
     motion.elapsedMs = 0;
     motion.progress = 0;
     motion.arrival = 0;
-    motion.impact = handoff.impactScale;
+    motion.impact = cue.transition.motion.impactAmplitude * handoff.impactScale;
     motion.overshoot = 0;
     motion.actorArrival = 0;
     motion.cameraArrival = 0;
@@ -823,16 +827,24 @@ function MotionDirector({
       handoff.continuity.toFixed(3),
     );
     stageElementRef.current?.setAttribute('data-cue-progress', '0.000');
+    stageElementRef.current?.setAttribute('data-cue-arrival', '0.000');
+    stageElementRef.current?.setAttribute('data-cue-impact', motion.impact.toFixed(3));
+    stageElementRef.current?.setAttribute('data-cue-overshoot', '0.000');
     lastReportedHandoffRef.current = handoff.continuity;
     lastReportedProgressRef.current = 0;
-  }, [eventId, motion, stageElementRef]);
+  }, [cue.transition.motion, eventId, motion, stageElementRef]);
 
   useEffect(() => {
     if (presenterPulse > 0) motion.voiceImpulse = 1;
   }, [motion, presenterPulse]);
 
   useFrame((_, delta) => {
-    sampleCueMotion(motion.elapsedMs, cue.transition.durationMs, motion);
+    sampleCueMotion(
+      motion.elapsedMs,
+      cue.transition.durationMs,
+      motion,
+      cue.transition.motion,
+    );
     motion.impact *= motion.impactScale;
     motion.overshoot *= 1 - motion.handoff * 0.36;
     motion.cameraArrival = samplePhaseWindow(
@@ -960,6 +972,18 @@ function MotionDirector({
       stageElementRef.current.setAttribute(
         'data-cue-progress',
         motion.progress.toFixed(3),
+      );
+      stageElementRef.current.setAttribute(
+        'data-cue-arrival',
+        motion.arrival.toFixed(3),
+      );
+      stageElementRef.current.setAttribute(
+        'data-cue-impact',
+        motion.impact.toFixed(3),
+      );
+      stageElementRef.current.setAttribute(
+        'data-cue-overshoot',
+        motion.overshoot.toFixed(3),
       );
     }
     if (Math.abs(motion.handoff - lastReportedHandoffRef.current) >= 0.01) {
