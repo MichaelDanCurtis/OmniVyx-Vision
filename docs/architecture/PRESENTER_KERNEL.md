@@ -58,7 +58,9 @@ The visual grammar is cue-directed rather than globally decorative. Each cue aut
 
 Semantic transitions and presenter energy are separate control channels. An accepted intent changes the deterministic stage event, while every accepted presenter utterance may also emit a bounded transient pulse that affects camera, lighting, cloth, glass, and hero motion without mutating the active event. Cue arrival, impact, and overshoot values plus the presenter pulse live on one stable mutable motion bus, keeping choreography synchronized without React state updates or render-loop allocations.
 
-Show schema version 2 adds authored headline lines, copy entrance vectors, copy timing, and optical sweep direction and intensity to every cue. The renderer interprets those values as masked kinetic typography plus a camera-space transition veil, so each beat has deliberate editorial motion while the veil remains one draw call. Render telemetry samples after the post-processing composer, reports actual frame rate, calls, and triangles, and explicitly resets Three.js counters without taking over the low-quality render loop.
+Show schema version 3 adds authored headline lines, copy entrance vectors, copy timing, optical sweep direction, and a hybrid media target to every cue. The media target controls asset, opacity, depth, scale, offset, drift, palette tint, and tempo. The current optical master is a project-local 1672x941 generated plate composited as one cached, depth-displaced shader surface behind the live 3D actors; presenter energy and cue tempo modulate its motion without recreating the texture.
+
+The renderer interprets transition values as masked kinetic typography plus a camera-space transition veil, so each beat has deliberate editorial motion while the veil remains one draw call. Render telemetry samples after the post-processing composer, reports actual frame rate, calls, and triangles, and explicitly resets Three.js counters without taking over the low-quality render loop. Low quality fades and hides the media surface before removing it from the draw count.
 
 ## Render Quality Contract
 

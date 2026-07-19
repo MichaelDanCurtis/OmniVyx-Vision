@@ -8,7 +8,7 @@ import { stageEvents } from './stageScore';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(2);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(3);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -28,6 +28,12 @@ describe('cinematicScore', () => {
         ...cue.transition.copyOffset,
         cue.transition.sweepAngle,
         cue.transition.sweepIntensity,
+        cue.media.opacity,
+        cue.media.scale,
+        ...cue.media.offset,
+        cue.media.depth,
+        cue.media.drift,
+        cue.media.tintStrength,
         ...Object.values(cue.composition),
         ...Object.values(cue.lighting),
         cue.motionEnergy,
@@ -43,6 +49,10 @@ describe('cinematicScore', () => {
       expect(cue.transition.copyDelayMs).toBeGreaterThanOrEqual(0);
       expect(cue.transition.sweepIntensity).toBeGreaterThanOrEqual(0);
       expect(cue.transition.sweepIntensity).toBeLessThanOrEqual(1.2);
+      expect(cue.media.asset).toMatch(/^\/engine\/.+\.(?:jpe?g|png|webp)$/i);
+      expect(cue.media.opacity).toBeGreaterThanOrEqual(0);
+      expect(cue.media.opacity).toBeLessThanOrEqual(1);
+      expect(cue.media.scale).toBeGreaterThan(0);
       expect(Object.values(cue.palette).every((color) => /^#[0-9a-f]{6}$/i.test(color))).toBe(true);
     }
   });
@@ -64,5 +74,7 @@ describe('cinematicScore', () => {
     expect(chart.chartScale).toBe(1);
     expect(chart.coreScale).toBeLessThan(0.1);
     expect(chart.growthScale).toBeLessThan(0.1);
+    expect(getCinematicCue('reveal_product').media.opacity)
+      .toBeGreaterThan(getCinematicCue('hold').media.opacity);
   });
 });

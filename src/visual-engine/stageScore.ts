@@ -13,14 +13,14 @@ export interface StageEventMeta {
   id: StageEventId;
   label: string;
   description: string;
-  playbackRate: number;
+  mediaRate: number;
 }
 
 export interface StageState {
   activeEvent: StageEventId;
   previousEvent: StageEventId | null;
   dynamicChartVisible: boolean;
-  videoPlaybackRate: number;
+  mediaPlaybackRate: number;
   quality: StageQuality;
   effectsEnabled: boolean;
 }
@@ -30,43 +30,43 @@ export const stageEvents: StageEventMeta[] = [
     id: 'open_brand',
     label: 'Open brand',
     description: 'Establish the stage, ambient motion, and dark cinematic space.',
-    playbackRate: 0.7,
+    mediaRate: 0.7,
   },
   {
     id: 'reveal_product',
     label: 'Reveal product',
     description: 'Bring product identity forward and push previous brand context aside.',
-    playbackRate: 1.1,
+    mediaRate: 1.1,
   },
   {
     id: 'explain_value',
     label: 'Explain value',
     description: 'Organize video and glass layers into a clearer composition.',
-    playbackRate: 0.9,
+    mediaRate: 0.9,
   },
   {
     id: 'grow_system',
     label: 'Grow system',
     description: 'Reveal the organic branching system behind the product story.',
-    playbackRate: 0.6,
+    mediaRate: 0.6,
   },
   {
     id: 'summon_dynamic_chart',
     label: 'Summon dynamic chart',
     description: 'Bring in a preloaded proof panel without breaking the cinematic stage.',
-    playbackRate: 0.45,
+    mediaRate: 0.45,
   },
   {
     id: 'hold',
     label: 'Hold',
     description: 'Keep the stage alive while the presenter lingers on a point.',
-    playbackRate: 0.25,
+    mediaRate: 0.25,
   },
   {
     id: 'resolve',
     label: 'Resolve',
     description: 'Land on a polished final tableau.',
-    playbackRate: 0.8,
+    mediaRate: 0.8,
   },
 ];
 
@@ -77,7 +77,7 @@ export function createInitialStageState(): StageState {
     activeEvent: 'open_brand',
     previousEvent: null,
     dynamicChartVisible: false,
-    videoPlaybackRate: getStageEventMeta('open_brand').playbackRate,
+    mediaPlaybackRate: getStageEventMeta('open_brand').mediaRate,
     quality: 'high',
     effectsEnabled: true,
   };
@@ -96,7 +96,7 @@ export function applyStageEvent(state: StageState, eventId: StageEventId): Stage
     activeEvent: eventId,
     previousEvent: eventId === 'hold' ? state.activeEvent : state.previousEvent,
     dynamicChartVisible: shouldShowDynamicChart,
-    videoPlaybackRate: meta.playbackRate,
+    mediaPlaybackRate: meta.mediaRate,
   };
 }
 

@@ -13,7 +13,7 @@ describe('stageScore', () => {
 
     expect(state.activeEvent).toBe('open_brand');
     expect(state.dynamicChartVisible).toBe(false);
-    expect(state.videoPlaybackRate).toBe(0.7);
+    expect(state.mediaPlaybackRate).toBe(0.7);
     expect(stageEvents.map((event) => event.id)).toEqual([
       'open_brand',
       'reveal_product',
@@ -31,7 +31,7 @@ describe('stageScore', () => {
 
     expect(revealed.dynamicChartVisible).toBe(false);
     expect(summoned.dynamicChartVisible).toBe(true);
-    expect(summoned.videoPlaybackRate).toBe(0.45);
+    expect(summoned.mediaPlaybackRate).toBe(0.45);
   });
 
   it('keeps the previous event context when holding', () => {
@@ -41,7 +41,7 @@ describe('stageScore', () => {
     expect(held.activeEvent).toBe('hold');
     expect(held.previousEvent).toBe('grow_system');
     expect(held.dynamicChartVisible).toBe(false);
-    expect(held.videoPlaybackRate).toBe(0.25);
+    expect(held.mediaPlaybackRate).toBe(0.25);
   });
 
   it('switches quality levels with deterministic feature flags', () => {

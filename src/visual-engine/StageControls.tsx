@@ -71,8 +71,8 @@ export function StageControls({
             <dd>{getStageEventMeta(state.activeEvent).label}</dd>
           </div>
           <div>
-            <dt>Video speed</dt>
-            <dd>{state.videoPlaybackRate.toFixed(2)}x</dd>
+            <dt>Media tempo</dt>
+            <dd>{state.mediaPlaybackRate.toFixed(2)}x</dd>
           </div>
           <div>
             <dt>Dynamic slot</dt>

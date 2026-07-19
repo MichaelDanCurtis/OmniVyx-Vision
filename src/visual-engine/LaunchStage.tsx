@@ -27,7 +27,7 @@ import {
   sampleCueMotion,
   type CueMotionSample,
 } from './motionEnvelope';
-import { VideoLayer } from './VideoLayer';
+import { CinematicMediaPlate } from './CinematicMediaPlate';
 import type { StageEventId, StageState } from './stageScore';
 
 interface StageMotionBus extends CueMotionSample {
@@ -86,6 +86,7 @@ export function LaunchStage({
       data-fps={measuredFps}
       data-draw-calls={renderTelemetry.calls}
       data-triangles={renderTelemetry.triangles}
+      data-media-tempo={state.mediaPlaybackRate.toFixed(2)}
       data-presenter-pulse={presenterPulse}
       style={{
         '--stage-primary': cue.palette.primary,
@@ -218,32 +219,14 @@ function LaunchScene({ cue, effectsEnabled, presenterPulse, state }: LaunchScene
       <CameraRig cue={cue} motion={motion} />
       <TransitionVeil cue={cue} motion={motion} />
       <StageEnvironment cue={cue} motion={motion} />
+      <CinematicMediaPlate
+        cue={cue}
+        enabled={state.quality === 'high'}
+        motion={motion}
+        playbackRate={state.mediaPlaybackRate}
+      />
       <SilkField cue={cue} motion={motion} />
       <SilkField cue={cue} foreground motion={motion} />
-      {cue.composition.primaryVideoOpacity > 0 ? (
-        <VideoLayer
-          src="/engine/launch-loop.webm"
-          playbackRate={state.videoPlaybackRate}
-          opacity={state.quality === 'high'
-            ? cue.composition.primaryVideoOpacity
-            : Math.min(0.5, cue.composition.primaryVideoOpacity)}
-          transitionDamping={cue.transition.damping}
-          position={[-1.95, 0.75, -0.9]}
-          rotation={[0.08, 0.44, -0.04]}
-          scale={[1.15, 1.15, 1]}
-        />
-      ) : null}
-      {cue.composition.secondaryVideoOpacity > 0 ? (
-        <VideoLayer
-          src="/engine/launch-loop.webm"
-          playbackRate={Math.min(2, state.videoPlaybackRate * 1.35)}
-          opacity={cue.composition.secondaryVideoOpacity}
-          transitionDamping={cue.transition.damping}
-          position={[2.55, 0.15, -1.55]}
-          rotation={[0.04, -0.58, 0.05]}
-          scale={[0.72, 1.18, 1]}
-        />
-      ) : null}
       <OpticalPanel cue={cue} index={0} motion={motion} position={[-2.9, 0.5, -1.2]} rotation={[0.08, 0.42, -0.08]} />
       <OpticalPanel cue={cue} index={1} motion={motion} position={[2.7, 0.85, -1.7]} rotation={[0.02, -0.42, 0.08]} />
       <OpticalPanel cue={cue} index={2} motion={motion} position={[0.45, -1.15, -0.65]} rotation={[-0.12, -0.14, 0.02]} />

@@ -23,13 +23,20 @@ export interface CinematicCue {
     sweepAngle: number;
     sweepIntensity: number;
   };
+  media: {
+    asset: string;
+    opacity: number;
+    scale: number;
+    offset: Vector2Tuple;
+    depth: number;
+    drift: number;
+    tintStrength: number;
+  };
   composition: {
     coreScale: number;
     growthScale: number;
     chartScale: number;
     ribbonLift: number;
-    primaryVideoOpacity: number;
-    secondaryVideoOpacity: number;
     glassSpread: number;
     heroX: number;
     heroY: number;
@@ -50,7 +57,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 2;
+  schemaVersion: 3;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -68,7 +75,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -89,13 +96,20 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         sweepAngle: 0.15,
         sweepIntensity: 0.74,
       },
+      media: {
+        asset: '/engine/optical-master-v1.jpg',
+        opacity: 0.34,
+        scale: 1.03,
+        offset: [0.22, 0.04],
+        depth: -4.7,
+        drift: 0.34,
+        tintStrength: 0.28,
+      },
       composition: {
         coreScale: 0.72,
         growthScale: 0.03,
         chartScale: 0.02,
         ribbonLift: -0.05,
-        primaryVideoOpacity: 0,
-        secondaryVideoOpacity: 0,
         glassSpread: 1.08,
         heroX: 0.25,
         heroY: 0.22,
@@ -126,13 +140,20 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         sweepAngle: 0,
         sweepIntensity: 0.95,
       },
+      media: {
+        asset: '/engine/optical-master-v1.jpg',
+        opacity: 0.48,
+        scale: 1.08,
+        offset: [-0.08, 0.04],
+        depth: -4.25,
+        drift: 0.66,
+        tintStrength: 0.16,
+      },
       composition: {
         coreScale: 1.12,
         growthScale: 0.04,
         chartScale: 0.02,
         ribbonLift: 0.24,
-        primaryVideoOpacity: 0,
-        secondaryVideoOpacity: 0,
         glassSpread: 1.22,
         heroX: 1.35,
         heroY: 0.28,
@@ -163,13 +184,20 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         sweepAngle: 1.15,
         sweepIntensity: 0.8,
       },
+      media: {
+        asset: '/engine/optical-master-v1.jpg',
+        opacity: 0.4,
+        scale: 1.05,
+        offset: [0.1, -0.02],
+        depth: -4.5,
+        drift: 0.46,
+        tintStrength: 0.38,
+      },
       composition: {
         coreScale: 0.92,
         growthScale: 0.05,
         chartScale: 0.02,
         ribbonLift: 0.06,
-        primaryVideoOpacity: 0,
-        secondaryVideoOpacity: 0,
         glassSpread: 0.94,
         heroX: 1.15,
         heroY: 0.18,
@@ -200,13 +228,20 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         sweepAngle: -0.55,
         sweepIntensity: 0.88,
       },
+      media: {
+        asset: '/engine/optical-master-v1.jpg',
+        opacity: 0.3,
+        scale: 1.02,
+        offset: [0.18, 0.02],
+        depth: -4.8,
+        drift: 0.38,
+        tintStrength: 0.58,
+      },
       composition: {
         coreScale: 0.04,
         growthScale: 1,
         chartScale: 0.02,
         ribbonLift: 0.12,
-        primaryVideoOpacity: 0,
-        secondaryVideoOpacity: 0,
         glassSpread: 1.14,
         heroX: -0.65,
         heroY: 0.08,
@@ -237,13 +272,20 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         sweepAngle: 3.1416,
         sweepIntensity: 1.1,
       },
+      media: {
+        asset: '/engine/optical-master-v1.jpg',
+        opacity: 0.24,
+        scale: 1.1,
+        offset: [-0.14, 0.03],
+        depth: -5,
+        drift: 0.24,
+        tintStrength: 0.46,
+      },
       composition: {
         coreScale: 0.02,
         growthScale: 0.04,
         chartScale: 1,
         ribbonLift: -0.04,
-        primaryVideoOpacity: 0,
-        secondaryVideoOpacity: 0,
         glassSpread: 1.3,
         heroX: -1.05,
         heroY: 0.12,
@@ -274,13 +316,20 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         sweepAngle: 1.5708,
         sweepIntensity: 0.25,
       },
+      media: {
+        asset: '/engine/optical-master-v1.jpg',
+        opacity: 0.18,
+        scale: 1,
+        offset: [0.08, 0],
+        depth: -5.1,
+        drift: 0.12,
+        tintStrength: 0.42,
+      },
       composition: {
         coreScale: 0.52,
         growthScale: 0.38,
         chartScale: 0.02,
         ribbonLift: 0.02,
-        primaryVideoOpacity: 0,
-        secondaryVideoOpacity: 0,
         glassSpread: 1,
         heroX: 0.4,
         heroY: 0.16,
@@ -311,13 +360,20 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         sweepAngle: 0.35,
         sweepIntensity: 1,
       },
+      media: {
+        asset: '/engine/optical-master-v1.jpg',
+        opacity: 0.42,
+        scale: 1.06,
+        offset: [0, 0.04],
+        depth: -4.45,
+        drift: 0.44,
+        tintStrength: 0.24,
+      },
       composition: {
         coreScale: 1.02,
         growthScale: 0.82,
         chartScale: 0.78,
         ribbonLift: 0.2,
-        primaryVideoOpacity: 0,
-        secondaryVideoOpacity: 0,
         glassSpread: 1.1,
         heroX: 0.65,
         heroY: 0.22,
