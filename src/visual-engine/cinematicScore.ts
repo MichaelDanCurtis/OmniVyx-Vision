@@ -54,6 +54,15 @@ export interface CinematicCue {
     rim: number;
     accent: number;
   };
+  lens: {
+    bloom: number;
+    focusDistance: number;
+    focusRange: number;
+    bokehScale: number;
+    vignetteDarkness: number;
+    vignetteOffset: number;
+    exposure: number;
+  };
   palette: {
     primary: string;
     secondary: string;
@@ -64,7 +73,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 4;
+  schemaVersion: 5;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -82,7 +91,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -129,6 +138,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: 0.08,
       },
       lighting: { key: 1.85, rim: 3.8, accent: 2.6 },
+      lens: {
+        bloom: 0.42,
+        focusDistance: 6.4,
+        focusRange: 4.2,
+        bokehScale: 0.78,
+        vignetteDarkness: 0.44,
+        vignetteOffset: 0.2,
+        exposure: 1,
+      },
       palette: {
         primary: '#8fe8f3',
         secondary: '#d9f7f2',
@@ -179,6 +197,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: -0.2,
       },
       lighting: { key: 2.7, rim: 5.2, accent: 3.4 },
+      lens: {
+        bloom: 0.62,
+        focusDistance: 5.9,
+        focusRange: 2.6,
+        bokehScale: 1.25,
+        vignetteDarkness: 0.48,
+        vignetteOffset: 0.18,
+        exposure: 1.08,
+      },
       palette: {
         primary: '#76edf4',
         secondary: '#f4fbff',
@@ -229,6 +256,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: 0.16,
       },
       lighting: { key: 2.25, rim: 4.4, accent: 4.2 },
+      lens: {
+        bloom: 0.46,
+        focusDistance: 6.2,
+        focusRange: 4,
+        bokehScale: 0.75,
+        vignetteDarkness: 0.42,
+        vignetteOffset: 0.22,
+        exposure: 0.98,
+      },
       palette: {
         primary: '#8ab8ff',
         secondary: '#dce9ff',
@@ -279,6 +315,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: -0.12,
       },
       lighting: { key: 2.05, rim: 3.6, accent: 3.1 },
+      lens: {
+        bloom: 0.44,
+        focusDistance: 5.8,
+        focusRange: 3.4,
+        bokehScale: 0.9,
+        vignetteDarkness: 0.4,
+        vignetteOffset: 0.22,
+        exposure: 1.02,
+      },
       palette: {
         primary: '#76e6ad',
         secondary: '#c8f6de',
@@ -329,6 +374,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: 0.2,
       },
       lighting: { key: 2.4, rim: 4.8, accent: 4.6 },
+      lens: {
+        bloom: 0.3,
+        focusDistance: 6,
+        focusRange: 8,
+        bokehScale: 0.15,
+        vignetteDarkness: 0.3,
+        vignetteOffset: 0.27,
+        exposure: 0.92,
+      },
       palette: {
         primary: '#59ddec',
         secondary: '#baf5f4',
@@ -379,6 +433,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: 0.05,
       },
       lighting: { key: 1.8, rim: 3.1, accent: 2.3 },
+      lens: {
+        bloom: 0.28,
+        focusDistance: 6.6,
+        focusRange: 8,
+        bokehScale: 0.3,
+        vignetteDarkness: 0.34,
+        vignetteOffset: 0.26,
+        exposure: 0.9,
+      },
       palette: {
         primary: '#9fcbd4',
         secondary: '#dce9e9',
@@ -429,6 +492,15 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         heroYaw: -0.08,
       },
       lighting: { key: 2.8, rim: 5.3, accent: 3.8 },
+      lens: {
+        bloom: 0.58,
+        focusDistance: 6.1,
+        focusRange: 3,
+        bokehScale: 1.05,
+        vignetteDarkness: 0.5,
+        vignetteOffset: 0.18,
+        exposure: 1.06,
+      },
       palette: {
         primary: '#a8f1f1',
         secondary: '#f4f7f5',

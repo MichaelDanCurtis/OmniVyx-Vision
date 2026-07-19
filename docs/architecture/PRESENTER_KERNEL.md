@@ -50,6 +50,7 @@ The current React proof submits transcript or intent signals through this contra
 - camera position, target, field of view, and transition character;
 - product core, organic system, dynamic slot, glass, and hybrid-media composition targets;
 - key, rim, and accent light levels;
+- bloom, depth focus, bokeh, vignette, and exposure targets;
 - continuous motion energy.
 
 Stage components consume those targets with frame-rate-independent exponential damping. Cue handlers never mutate Three.js objects directly and render-loop code does not allocate target vectors per frame.
@@ -62,7 +63,7 @@ Continuous presenter energy now enters through a second stable mutable signal. T
 
 The macOS bundle declares microphone and speech-recognition usage descriptions. The native audio-energy surface is implemented as Web Audio hosted in WKWebView but remains `planned` until microphone device preflight and capture are verified in the packaged app. A future Core Audio adapter can write the same signal contract without changing the stage. Streaming transcription remains planned behind the separate Apple SpeechAnalyzer adapter.
 
-Show schema version 4 adds authored phase windows for camera, media, actors, and copy. Every window is a normalized interval within the cue duration, allowing the director to lead with camera intent, hand motion to the media and live actors, then reveal copy instead of making every layer chase a target simultaneously. The previous copy remains as one temporary, inert DOM layer during its authored exit and is removed after the handoff. Reduced-motion environments suppress that outgoing layer.
+Show schema version 5 combines authored phase windows with a cue-directed optical lens. Every phase window is a normalized interval within the cue duration, allowing the director to lead with camera intent, hand motion to the media and live actors, then reveal copy instead of making every layer chase a target simultaneously. Bloom, focus distance and range, bokeh, vignette, and exposure are damped on the same motion bus: reveal and resolve moments gain dimensional depth, while dynamic-data and hold moments preserve a wide, crisp focus plane. Presenter energy adds bounded optical response without changing the cue or allocating effects in the render loop. The previous copy remains as one temporary, inert DOM layer during its authored exit and is removed after the handoff. Reduced-motion environments suppress that outgoing layer.
 
 The media target controls asset, opacity, depth, scale, offset, drift, palette tint, and tempo. The current optical master is a project-local 1672x941 generated plate composited as one cached, depth-displaced shader surface behind the live 3D actors; presenter energy and cue tempo modulate its motion without recreating the texture.
 

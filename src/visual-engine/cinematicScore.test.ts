@@ -8,7 +8,7 @@ import { stageEvents } from './stageScore';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(4);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(5);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -37,6 +37,7 @@ describe('cinematicScore', () => {
         cue.media.tintStrength,
         ...Object.values(cue.composition),
         ...Object.values(cue.lighting),
+        ...Object.values(cue.lens),
         cue.motionEnergy,
       ];
 
@@ -63,6 +64,15 @@ describe('cinematicScore', () => {
       expect(cue.media.opacity).toBeGreaterThanOrEqual(0);
       expect(cue.media.opacity).toBeLessThanOrEqual(1);
       expect(cue.media.scale).toBeGreaterThan(0);
+      expect(cue.lens.bloom).toBeGreaterThanOrEqual(0);
+      expect(cue.lens.focusDistance).toBeGreaterThan(0);
+      expect(cue.lens.focusRange).toBeGreaterThan(0);
+      expect(cue.lens.bokehScale).toBeGreaterThanOrEqual(0);
+      expect(cue.lens.vignetteDarkness).toBeGreaterThanOrEqual(0);
+      expect(cue.lens.vignetteDarkness).toBeLessThanOrEqual(1);
+      expect(cue.lens.vignetteOffset).toBeGreaterThanOrEqual(0);
+      expect(cue.lens.vignetteOffset).toBeLessThanOrEqual(1);
+      expect(cue.lens.exposure).toBeGreaterThan(0);
       expect(Object.values(cue.palette).every((color) => /^#[0-9a-f]{6}$/i.test(color))).toBe(true);
     }
   });
@@ -86,5 +96,14 @@ describe('cinematicScore', () => {
     expect(chart.growthScale).toBeLessThan(0.1);
     expect(getCinematicCue('reveal_product').media.opacity)
       .toBeGreaterThan(getCinematicCue('hold').media.opacity);
+  });
+
+  it('keeps evidence crisp and gives the product reveal a tighter optical lens', () => {
+    const reveal = getCinematicCue('reveal_product').lens;
+    const chart = getCinematicCue('summon_dynamic_chart').lens;
+
+    expect(chart.focusRange).toBeGreaterThan(reveal.focusRange);
+    expect(chart.bokehScale).toBeLessThan(reveal.bokehScale);
+    expect(chart.bloom).toBeLessThan(reveal.bloom);
   });
 });

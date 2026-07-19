@@ -1,7 +1,8 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { EffectComposer, Bloom, DepthOfField, Vignette } from '@react-three/postprocessing';
+import { DepthOfField, EffectComposer } from '@react-three/postprocessing';
 import { AdaptiveDpr, PerformanceMonitor, RoundedBox } from '@react-three/drei';
 import { Maximize2, Minimize2 } from 'lucide-react';
+import { BlendFunction, BloomEffect, VignetteEffect } from 'postprocessing';
 import {
   useEffect,
   useLayoutEffect,
@@ -9,6 +10,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ComponentRef,
   type RefObject,
 } from 'react';
 import {
@@ -117,6 +119,10 @@ export function LaunchStage({
       data-fps={measuredFps}
       data-frame-p95={renderTelemetry.frameTimeP95}
       data-long-frames={renderTelemetry.longFrames}
+      data-lens-bloom={cue.lens.bloom.toFixed(2)}
+      data-lens-bokeh={cue.lens.bokehScale.toFixed(2)}
+      data-lens-exposure={cue.lens.exposure.toFixed(2)}
+      data-lens-focus-range={cue.lens.focusRange.toFixed(2)}
       data-draw-calls={renderTelemetry.calls}
       data-pixel-ratio={renderTelemetry.pixelRatio.toFixed(2)}
       data-triangles={renderTelemetry.triangles}
@@ -363,14 +369,108 @@ function LaunchScene({
       <HeroMonolith cue={cue} motion={motion} />
       <NetworkBloom cue={cue} motion={motion} />
 
-      {effectsEnabled ? (
-        <EffectComposer>
-          <Bloom intensity={0.52} luminanceThreshold={0.28} mipmapBlur />
-          <DepthOfField focusDistance={0.03} focalLength={0.026} bokehScale={1.15} />
-          <Vignette darkness={0.48} eskil={false} offset={0.2} />
-        </EffectComposer>
-      ) : null}
+      {effectsEnabled ? <CinematicPost cue={cue} motion={motion} /> : null}
     </>
+  );
+}
+
+function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
+  const gl = useThree((threeState) => threeState.gl);
+  const depthOfFieldRef = useRef<ComponentRef<typeof DepthOfField>>(null);
+  const bloomEffect = useMemo(
+    () => new BloomEffect({
+      blendFunction: BlendFunction.ADD,
+      intensity: 0.42,
+      luminanceThreshold: 0.28,
+      mipmapBlur: true,
+    }),
+    [],
+  );
+  const vignetteEffect = useMemo(
+    () => new VignetteEffect({
+      darkness: 0.44,
+      eskil: false,
+      offset: 0.2,
+    }),
+    [],
+  );
+
+  useEffect(() => () => {
+    gl.toneMappingExposure = 1;
+    bloomEffect.dispose();
+    vignetteEffect.dispose();
+  }, [bloomEffect, gl, vignetteEffect]);
+
+  useFrame((_, delta) => {
+    const damping = phaseDamping(cue.transition.damping, motion.mediaArrival);
+    bloomEffect.intensity = MathUtils.damp(
+      bloomEffect.intensity,
+      cue.lens.bloom
+        + motion.impact * 0.05
+        + motion.voiceLevel * 0.16
+        + motion.voicePeak * 0.08,
+      damping,
+      delta,
+    );
+    if (depthOfFieldRef.current) {
+      depthOfFieldRef.current.bokehScale = MathUtils.damp(
+        depthOfFieldRef.current.bokehScale,
+        cue.lens.bokehScale
+          + motion.impact * 0.18
+          + motion.voicePeak * 0.08,
+        damping,
+        delta,
+      );
+      depthOfFieldRef.current.cocMaterial.focusDistance = MathUtils.damp(
+        depthOfFieldRef.current.cocMaterial.focusDistance,
+        cue.lens.focusDistance - motion.voiceLevel * 0.04,
+        damping,
+        delta,
+      );
+      depthOfFieldRef.current.cocMaterial.focusRange = MathUtils.damp(
+        depthOfFieldRef.current.cocMaterial.focusRange,
+        cue.lens.focusRange,
+        damping,
+        delta,
+      );
+    }
+    vignetteEffect.darkness = MathUtils.damp(
+      vignetteEffect.darkness,
+      cue.lens.vignetteDarkness
+        + motion.impact * 0.03
+        - motion.voiceLevel * 0.04,
+      damping,
+      delta,
+    );
+    vignetteEffect.offset = MathUtils.damp(
+      vignetteEffect.offset,
+      cue.lens.vignetteOffset,
+      damping,
+      delta,
+    );
+    gl.toneMappingExposure = MathUtils.damp(
+      gl.toneMappingExposure,
+      cue.lens.exposure
+        + motion.impact * 0.05
+        + motion.voiceLevel * 0.035
+        + motion.voicePeak * 0.02,
+      damping,
+      delta,
+    );
+  }, 1);
+
+  return (
+    <EffectComposer>
+      <primitive object={bloomEffect} />
+      <DepthOfField
+        ref={depthOfFieldRef}
+        bokehScale={0.78}
+        focusDistance={6.4}
+        focusRange={4.2}
+        resolutionScale={0.5}
+      />
+      <primitive object={vignetteEffect} />
+    </EffectComposer>
   );
 }
 
