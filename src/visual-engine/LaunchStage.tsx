@@ -41,6 +41,7 @@ import {
   sampleCameraShotArc,
   sampleCueHandoff,
   sampleCueMotion,
+  sampleOpticalHandoff,
   samplePhaseWindow,
   type CueMotionSample,
 } from './motionEnvelope';
@@ -187,6 +188,7 @@ export function LaunchStage({
       data-glass-instances={OPTICAL_PANEL_LAYOUT.length}
       data-optical-core-draws={OPTICAL_CORE_DRAW_CALLS}
       data-optical-core-fins={OPTICAL_CORE_FIN_LAYOUT.length}
+      data-optical-handoff-budget="1"
       data-organic-nodes={ORGANIC_NETWORK_NODE_COUNT}
       data-organic-scale={cue.composition.growthScale.toFixed(2)}
       data-evidence-active={state.dynamicChartVisible}
@@ -507,7 +509,7 @@ function LaunchScene({
       <CinematicLighting cue={cue} motion={motion} />
 
       <CameraRig cue={cue} motion={motion} />
-      <TransitionVeil cue={cue} motion={motion} />
+      <OpticalHandoff cue={cue} motion={motion} />
       <StageEnvironment cue={cue} motion={motion} />
       <CinematicMediaPlate
         cue={cue}
@@ -649,6 +651,7 @@ function MotionDirector({
   const lastReportedEnergyRef = useRef(-1);
   const lastReportedHandoffRef = useRef(-1);
   const lastReportedPeakRef = useRef(-1);
+  const lastReportedProgressRef = useRef(-1);
 
   useEffect(() => {
     const handoff = sampleCueHandoff(motion.progress, motion.elapsedMs, motion.handoff);
@@ -670,7 +673,9 @@ function MotionDirector({
       'data-cue-handoff',
       handoff.continuity.toFixed(3),
     );
+    stageElementRef.current?.setAttribute('data-cue-progress', '0.000');
     lastReportedHandoffRef.current = handoff.continuity;
+    lastReportedProgressRef.current = 0;
   }, [eventId, motion, stageElementRef]);
 
   useEffect(() => {
@@ -731,6 +736,16 @@ function MotionDirector({
       stageElementRef.current.setAttribute(
         'data-presenter-peak',
         motion.voicePeak.toFixed(2),
+      );
+    }
+    if (
+      Math.abs(motion.progress - lastReportedProgressRef.current) >= 0.025
+      || (motion.progress === 1 && lastReportedProgressRef.current !== 1)
+    ) {
+      lastReportedProgressRef.current = motion.progress;
+      stageElementRef.current.setAttribute(
+        'data-cue-progress',
+        motion.progress.toFixed(3),
       );
     }
     if (Math.abs(motion.handoff - lastReportedHandoffRef.current) >= 0.01) {
@@ -838,7 +853,7 @@ function RenderTelemetryProbe({
   return null;
 }
 
-const transitionVeilVertexShader = /* glsl */ `
+const opticalHandoffVertexShader = /* glsl */ `
   varying vec2 vUv;
 
   void main() {
@@ -847,52 +862,115 @@ const transitionVeilVertexShader = /* glsl */ `
   }
 `;
 
-const transitionVeilFragmentShader = /* glsl */ `
-  uniform float uAngle;
-  uniform vec3 uColor;
+const opticalHandoffFragmentShader = /* glsl */ `
   uniform vec3 uAccent;
-  uniform float uIntensity;
+  uniform float uAngle;
+  uniform float uAspect;
+  uniform float uImpact;
+  uniform float uOpacity;
+  uniform vec3 uPrimary;
   uniform float uProgress;
+  uniform vec3 uSecondary;
+  uniform float uTime;
+  uniform float uVoice;
+  uniform float uWidth;
   varying vec2 vUv;
 
   void main() {
+    vec2 point = vUv - 0.5;
+    point.x *= uAspect;
     vec2 axis = vec2(cos(uAngle), sin(uAngle));
-    float coordinate = dot(vUv - 0.5, axis) + 0.5;
-    float travel = smoothstep(0.0, 0.78, uProgress);
-    float center = mix(-0.28, 1.28, travel);
-    float distanceToSweep = abs(coordinate - center);
-    float filament = exp(-pow(distanceToSweep * 17.0, 1.55));
-    float aura = exp(-pow(distanceToSweep * 5.0, 2.0));
-    float enter = smoothstep(0.01, 0.1, uProgress);
-    float exit = 1.0 - smoothstep(0.64, 0.96, uProgress);
-    float interference = 0.9 + 0.1 * sin(vUv.y * 28.0 + sin(vUv.x * 9.0) * 2.0);
-    vec3 color = mix(uColor, uAccent, smoothstep(0.15, 0.86, vUv.y));
-    float alpha = (filament * 0.14 + aura * 0.04) * uIntensity * enter * exit * interference;
+    vec2 crossAxis = vec2(-axis.y, axis.x);
+    float along = dot(point, axis);
+    float across = dot(point, crossAxis);
+    float travel = smoothstep(0.015, 0.9, uProgress);
+    float span = 0.76 + max(0.0, uAspect - 1.0) * 0.42;
+    float center = mix(-span, span, travel);
+    float curl = sin(across * 12.0 + uTime * 0.62) * 0.015 * uWidth
+      + sin(across * 31.0 - uTime * 0.38) * 0.005;
+    float signedDistance = along - center + curl;
+    float distanceToSweep = abs(signedDistance);
+
+    float body = exp(-pow(distanceToSweep * 17.0 / uWidth, 1.45));
+    float core = exp(-pow(distanceToSweep * 82.0 / uWidth, 1.32));
+    float fringeA = exp(-pow(abs(signedDistance - 0.026 * uWidth) * 98.0 / uWidth, 1.4));
+    float fringeB = exp(-pow(abs(signedDistance + 0.034 * uWidth) * 88.0 / uWidth, 1.4));
+    float caustic = exp(-pow(abs(signedDistance - sin(across * 19.0 + uTime) * 0.009)
+      * 48.0 / uWidth, 1.5));
+    float aperture = 0.45 + 0.55 * exp(-across * across * 2.8);
+    float weave = sin(across * 73.0 - uTime * (0.9 + uVoice * 0.5)) * 0.5 + 0.5;
+    float fibers = pow(weave, 8.0) * body;
+    vec3 spectrum = 0.5 + 0.5 * cos(
+      6.28318 * (signedDistance * 7.5 + across * 0.13 + vec3(0.0, 0.16, 0.34))
+    );
+
+    vec3 color = mix(uPrimary, uAccent, smoothstep(-0.45, 0.45, across)) * body * 0.32;
+    color += uSecondary * core * (1.2 + uImpact * 0.38);
+    color += uAccent * fringeA * 0.62;
+    color += uPrimary * fringeB * 0.58;
+    color += spectrum * (fringeA + fringeB) * 0.36;
+    color += mix(uPrimary, uSecondary, weave) * caustic * (0.16 + uVoice * 0.12);
+    color += uSecondary * fibers * (0.12 + uVoice * 0.18);
+    float alpha = uOpacity * aperture * (
+      body * 0.045
+      + core * 0.2
+      + (fringeA + fringeB) * 0.075
+      + caustic * 0.04
+      + fibers * 0.03
+    );
+    if (alpha < 0.002) discard;
 
     gl_FragColor = vec4(color, alpha);
   }
 `;
 
-function TransitionVeil({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
+function OpticalHandoff({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus }) {
   const meshRef = useRef<Mesh>(null);
   const materialRef = useRef<ShaderMaterial>(null);
   const paletteTargets = useMemo(
     () => ({
-      color: new Color(cue.palette.primary),
+      primary: new Color(cue.palette.primary),
+      secondary: new Color(cue.palette.secondary),
       accent: new Color(cue.palette.accent),
     }),
     [],
   );
+  const handoffSample = useMemo(
+    () => ({ active: false, opacity: 0, width: 1 }),
+    [],
+  );
   const uniforms = useMemo(() => ({
-    uAngle: { value: cue.transition.sweepAngle },
-    uColor: { value: new Color(cue.palette.primary) },
     uAccent: { value: new Color(cue.palette.accent) },
-    uIntensity: { value: cue.transition.sweepIntensity },
+    uAngle: { value: cue.transition.sweepAngle },
+    uAspect: { value: 1 },
+    uImpact: { value: 0 },
+    uOpacity: { value: 0 },
+    uPrimary: { value: new Color(cue.palette.primary) },
     uProgress: { value: 0 },
+    uSecondary: { value: new Color(cue.palette.secondary) },
+    uTime: { value: 0 },
+    uVoice: { value: 0 },
+    uWidth: { value: 1 },
   }), []);
 
-  useFrame(({ camera, size }, delta) => {
+  useFrame(({ camera, clock, size }, delta) => {
     if (!meshRef.current || !materialRef.current) return;
+
+    sampleOpticalHandoff(
+      motion.progress,
+      motion.handoff,
+      cue.transition.sweepIntensity,
+      handoffSample,
+    );
+    const paletteAlpha = 1 - Math.exp(-cue.transition.damping * delta);
+    paletteTargets.primary.set(cue.palette.primary);
+    paletteTargets.secondary.set(cue.palette.secondary);
+    paletteTargets.accent.set(cue.palette.accent);
+    materialRef.current.uniforms.uPrimary.value.lerp(paletteTargets.primary, paletteAlpha);
+    materialRef.current.uniforms.uSecondary.value.lerp(paletteTargets.secondary, paletteAlpha);
+    materialRef.current.uniforms.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
+    meshRef.current.visible = handoffSample.active;
+    if (!handoffSample.active) return;
 
     const perspectiveCamera = camera as PerspectiveCamera;
     const distance = 0.8;
@@ -903,22 +981,29 @@ function TransitionVeil({ cue, motion }: { cue: CinematicCue; motion: StageMotio
     meshRef.current.translateZ(-distance);
     meshRef.current.scale.set(viewWidth * 0.54, viewHeight * 0.54, 1);
 
-    const paletteAlpha = 1 - Math.exp(-cue.transition.damping * delta);
-    paletteTargets.color.set(cue.palette.primary);
-    paletteTargets.accent.set(cue.palette.accent);
-    materialRef.current.uniforms.uColor.value.lerp(paletteTargets.color, paletteAlpha);
-    materialRef.current.uniforms.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
     materialRef.current.uniforms.uAngle.value = cue.transition.sweepAngle;
-    materialRef.current.uniforms.uIntensity.value = cue.transition.sweepIntensity;
+    materialRef.current.uniforms.uAspect.value = size.width / size.height;
+    materialRef.current.uniforms.uImpact.value = motion.impact;
+    materialRef.current.uniforms.uOpacity.value = handoffSample.opacity;
     materialRef.current.uniforms.uProgress.value = motion.progress;
+    materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
+    materialRef.current.uniforms.uVoice.value = Math.min(
+      1.4,
+      motion.voiceLevel + motion.voiceImpulse * 0.48 + motion.voicePeak * 0.22,
+    );
+    materialRef.current.uniforms.uWidth.value = handoffSample.width;
   });
 
   return (
-    <mesh ref={meshRef} frustumCulled={false} renderOrder={100}>
+    <mesh ref={meshRef} frustumCulled={false} renderOrder={100} visible={false}>
       <planeGeometry args={[2, 2]} />
       <shaderMaterial
         ref={materialRef}
-        args={[{ uniforms, vertexShader: transitionVeilVertexShader, fragmentShader: transitionVeilFragmentShader }]}
+        args={[{
+          uniforms,
+          vertexShader: opticalHandoffVertexShader,
+          fragmentShader: opticalHandoffFragmentShader,
+        }]}
         blending={AdditiveBlending}
         depthTest={false}
         depthWrite={false}

@@ -10,6 +10,12 @@ export interface CueHandoffSample {
   impactScale: number;
 }
 
+export interface OpticalHandoffSample {
+  active: boolean;
+  opacity: number;
+  width: number;
+}
+
 export type MotionPhaseWindow = readonly [start: number, end: number];
 
 export function sampleCueMotion(
@@ -73,6 +79,30 @@ export function sampleCueHandoff(
   };
 }
 
+export function sampleOpticalHandoff(
+  progress: number,
+  continuity: number,
+  intensity: number,
+  target: OpticalHandoffSample = { active: false, opacity: 0, width: 1 },
+): OpticalHandoffSample {
+  if (!Number.isFinite(progress) || progress < 0 || progress > 1) {
+    throw new Error('Optical handoff progress must be a finite value between zero and one.');
+  }
+  if (!Number.isFinite(continuity) || continuity < 0 || continuity > 1) {
+    throw new Error('Optical handoff continuity must be a finite value between zero and one.');
+  }
+  if (!Number.isFinite(intensity) || intensity < 0) {
+    throw new Error('Optical handoff intensity must be a non-negative finite number.');
+  }
+
+  const enter = smoothstep01(progress / 0.075);
+  const exit = 1 - smoothstep01((progress - 0.7) / 0.28);
+  target.opacity = Math.min(1.2, intensity * enter * exit * (1 - continuity * 0.28));
+  target.width = 1 + continuity * 0.58;
+  target.active = target.opacity > 0.003;
+  return target;
+}
+
 export function sampleCameraShotArc(progress: number): number {
   if (!Number.isFinite(progress) || progress < 0 || progress > 1) {
     throw new Error('Camera shot progress must be a finite value between zero and one.');
@@ -100,4 +130,9 @@ export function samplePhaseWindow(
 
   const normalized = Math.min(1, Math.max(0, (progress - start) / (end - start)));
   return normalized * normalized * (3 - 2 * normalized);
+}
+
+function smoothstep01(value: number): number {
+  const bounded = Math.min(1, Math.max(0, value));
+  return bounded * bounded * (3 - 2 * bounded);
 }

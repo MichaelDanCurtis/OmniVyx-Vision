@@ -4,6 +4,7 @@ import {
   sampleCameraShotArc,
   sampleCueHandoff,
   sampleCueMotion,
+  sampleOpticalHandoff,
   samplePhaseWindow,
 } from './motionEnvelope';
 
@@ -72,6 +73,30 @@ describe('motionEnvelope', () => {
     expect(() => sampleCueHandoff(1.1, 200)).toThrow(/between zero and one/);
     expect(() => sampleCueHandoff(0.4, -1)).toThrow(/non-negative finite/);
     expect(() => sampleCueHandoff(0.4, 200, -0.1)).toThrow(/between zero and one/);
+  });
+
+  it('shapes a cullable optical handoff without amplifying interruptions', () => {
+    expect(sampleOpticalHandoff(0, 0, 1)).toEqual({
+      active: false,
+      opacity: 0,
+      width: 1,
+    });
+
+    const direct = sampleOpticalHandoff(0.3, 0, 0.9);
+    const interrupted = sampleOpticalHandoff(0.3, 0.75, 0.9);
+    expect(direct).toEqual({ active: true, opacity: 0.9, width: 1 });
+    expect(interrupted.active).toBe(true);
+    expect(interrupted.opacity).toBeLessThan(direct.opacity);
+    expect(interrupted.width).toBeGreaterThan(direct.width);
+    expect(sampleOpticalHandoff(1, 0, 1).active).toBe(false);
+  });
+
+  it('reuses an optical handoff target and rejects invalid samples', () => {
+    const target = { active: false, opacity: 0, width: 1 };
+    expect(sampleOpticalHandoff(0.4, 0.2, 1.1, target)).toBe(target);
+    expect(() => sampleOpticalHandoff(-0.1, 0, 1)).toThrow(/progress/);
+    expect(() => sampleOpticalHandoff(0.2, 1.1, 1)).toThrow(/continuity/);
+    expect(() => sampleOpticalHandoff(0.2, 0, -1)).toThrow(/intensity/);
   });
 
   it('shapes a camera shot through one transient arc', () => {
