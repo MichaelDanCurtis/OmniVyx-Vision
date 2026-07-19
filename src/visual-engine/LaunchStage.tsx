@@ -34,6 +34,7 @@ import {
 import { getCinematicCue, type CinematicCue } from './cinematicScore';
 import {
   decayImpulse,
+  sampleCueHandoff,
   sampleCueMotion,
   samplePhaseWindow,
   type CueMotionSample,
@@ -54,6 +55,8 @@ interface StageMotionBus extends CueMotionSample {
   actorArrival: number;
   cameraArrival: number;
   elapsedMs: number;
+  handoff: number;
+  impactScale: number;
   mediaArrival: number;
   voiceImpulse: number;
   voiceLevel: number;
@@ -255,19 +258,29 @@ function KineticStageCopy({
   eventId: StageEventId;
   pace: number;
 }) {
-  const previousRef = useRef({ cue, eventId, pace });
+  const previousRef = useRef({ cue, eventId, pace, startedAtMs: Date.now() });
+  const [interrupted, setInterrupted] = useState(false);
   const [outgoing, setOutgoing] = useState<CopyLayerState | null>(null);
 
   useLayoutEffect(() => {
     const previous = previousRef.current;
-    previousRef.current = { cue, eventId, pace };
+    const changedAtMs = Date.now();
+    previousRef.current = { cue, eventId, pace, startedAtMs: changedAtMs };
     if (previous.eventId === eventId) return;
 
-    const exitDurationMs = clamp(
+    const wasInterrupted = changedAtMs - previous.startedAtMs < scaleCueDuration(
+      previous.cue.transition.durationMs,
+      previous.pace,
+    );
+    const authoredExitDurationMs = clamp(
       scaleCueDuration(previous.cue.transition.durationMs * 0.34, previous.pace),
       240,
       680,
     );
+    const exitDurationMs = wasInterrupted
+      ? clamp(authoredExitDurationMs * 0.58, 180, 320)
+      : authoredExitDurationMs;
+    setInterrupted(wasInterrupted);
     setOutgoing({ ...previous, exitDurationMs });
     const timer = window.setTimeout(() => setOutgoing(null), exitDurationMs);
     return () => window.clearTimeout(timer);
@@ -285,7 +298,13 @@ function KineticStageCopy({
           pace={outgoing.pace}
         />
       ) : null}
-      <StageCopyLayer cue={cue} eventId={eventId} key={`${eventId}-in`} pace={pace} />
+      <StageCopyLayer
+        cue={cue}
+        eventId={eventId}
+        interrupted={interrupted}
+        key={`${eventId}-in`}
+        pace={pace}
+      />
     </>
   );
 }
@@ -294,17 +313,19 @@ function StageCopyLayer({
   cue,
   eventId,
   exitDurationMs = 0,
+  interrupted = false,
   outgoing = false,
   pace,
 }: {
   cue: CinematicCue;
   eventId: StageEventId;
   exitDurationMs?: number;
+  interrupted?: boolean;
   outgoing?: boolean;
   pace: number;
 }) {
   const copyWindow = cue.transition.staging.copy;
-  const copyDurationMs = clamp(
+  const authoredDurationMs = clamp(
     scaleCueDuration(
       cue.transition.durationMs * (copyWindow[1] - copyWindow[0]) * 1.25,
       pace,
@@ -312,20 +333,27 @@ function StageCopyLayer({
     360,
     960,
   );
-  const copyDelayMs = scaleCueDuration(
+  const authoredDelayMs = scaleCueDuration(
     cue.transition.copyDelayMs + cue.transition.durationMs * copyWindow[0],
     pace,
   );
+  const copyDurationMs = interrupted
+    ? clamp(authoredDurationMs * 0.62, 300, 480)
+    : authoredDurationMs;
+  const copyDelayMs = interrupted
+    ? clamp(authoredDelayMs * 0.12, 28, 64)
+    : authoredDelayMs;
   const style = {
     '--cue-copy-duration': `${copyDurationMs}ms`,
     '--cue-copy-delay': `${copyDelayMs}ms`,
     '--cue-copy-x': `${cue.transition.copyOffset[0]}px`,
     '--cue-copy-y': `${cue.transition.copyOffset[1]}px`,
     '--cue-line-stagger': `${clamp(
-      scaleCueDuration(cue.transition.durationMs * 0.055, pace),
-      42,
-      96,
+      scaleCueDuration(cue.transition.durationMs * (interrupted ? 0.032 : 0.055), pace),
+      interrupted ? 28 : 42,
+      interrupted ? 52 : 96,
     )}ms`,
+    '--cue-body-delay': `${copyDelayMs + (interrupted ? 84 : 180)}ms`,
     '--cue-exit-duration': `${exitDurationMs}ms`,
     '--cue-exit-x': `${cue.transition.copyOffset[0] * -0.32}px`,
     '--cue-exit-y': `${cue.transition.copyOffset[1] * -0.24 - 6}px`,
@@ -336,8 +364,11 @@ function StageCopyLayer({
       aria-hidden={outgoing || undefined}
       className={outgoing
         ? 'visual-engine-copy stage-copy-outgoing'
-        : 'visual-engine-copy stage-copy-current'}
+        : interrupted
+          ? 'visual-engine-copy stage-copy-current stage-copy-interrupted'
+          : 'visual-engine-copy stage-copy-current'}
       data-copy-event={eventId}
+      data-copy-interrupted={interrupted || undefined}
       style={style}
     >
       <p className="eyebrow">{cue.copy.eyebrow}</p>
@@ -376,6 +407,8 @@ function LaunchScene({
     actorArrival: 0,
     cameraArrival: 0,
     elapsedMs: 0,
+    handoff: 0,
+    impactScale: 1,
     mediaArrival: 0,
     progress: 0,
     arrival: 0,
@@ -452,7 +485,7 @@ function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotion
   }, [bloomEffect, gl, vignetteEffect]);
 
   useFrame((_, delta) => {
-    const damping = phaseDamping(cue.transition.damping, motion.mediaArrival);
+    const damping = phaseDamping(cue.transition.damping, motion.mediaArrival, motion.handoff);
     bloomEffect.intensity = MathUtils.damp(
       bloomEffect.intensity,
       cue.lens.bloom
@@ -544,18 +577,31 @@ function MotionDirector({
   const energyReportFrameRef = useRef(0);
   const lastReportedActiveRef = useRef<boolean | null>(null);
   const lastReportedEnergyRef = useRef(-1);
+  const lastReportedHandoffRef = useRef(-1);
   const lastReportedPeakRef = useRef(-1);
 
   useEffect(() => {
+    const handoff = sampleCueHandoff(motion.progress, motion.elapsedMs, motion.handoff);
+    motion.handoff = handoff.continuity;
+    motion.impactScale = handoff.impactScale;
     motion.elapsedMs = 0;
     motion.progress = 0;
     motion.arrival = 0;
-    motion.impact = 1;
+    motion.impact = handoff.impactScale;
     motion.overshoot = 0;
     motion.actorArrival = 0;
     motion.cameraArrival = 0;
     motion.mediaArrival = 0;
-  }, [eventId, motion]);
+    stageElementRef.current?.setAttribute(
+      'data-cue-interrupted',
+      handoff.continuity > 0 ? 'true' : 'false',
+    );
+    stageElementRef.current?.setAttribute(
+      'data-cue-handoff',
+      handoff.continuity.toFixed(3),
+    );
+    lastReportedHandoffRef.current = handoff.continuity;
+  }, [eventId, motion, stageElementRef]);
 
   useEffect(() => {
     if (presenterPulse > 0) motion.voiceImpulse = 1;
@@ -563,6 +609,8 @@ function MotionDirector({
 
   useFrame((_, delta) => {
     sampleCueMotion(motion.elapsedMs, cue.transition.durationMs, motion);
+    motion.impact *= motion.impactScale;
+    motion.overshoot *= 1 - motion.handoff * 0.36;
     motion.cameraArrival = samplePhaseWindow(
       motion.progress,
       cue.transition.staging.camera,
@@ -588,6 +636,7 @@ function MotionDirector({
       motion.voicePeak * Math.exp(-7.5 * delta),
     );
     motion.elapsedMs += delta * 1_000 * pace;
+    motion.handoff = decayImpulse(motion.handoff, delta, 3.2);
     motion.voiceImpulse = decayImpulse(motion.voiceImpulse, delta, 4.8);
 
     energyReportFrameRef.current = (energyReportFrameRef.current + 1) % 6;
@@ -613,6 +662,16 @@ function MotionDirector({
         'data-presenter-peak',
         motion.voicePeak.toFixed(2),
       );
+    }
+    if (Math.abs(motion.handoff - lastReportedHandoffRef.current) >= 0.01) {
+      lastReportedHandoffRef.current = motion.handoff;
+      stageElementRef.current.setAttribute(
+        'data-cue-handoff',
+        motion.handoff.toFixed(3),
+      );
+      if (motion.handoff <= 0.01) {
+        stageElementRef.current.setAttribute('data-cue-interrupted', 'false');
+      }
     }
   });
 
@@ -809,7 +868,7 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
   const accentTarget = useMemo(() => new Color(cue.palette.accent), []);
 
   useFrame((_, delta) => {
-    const damping = phaseDamping(cue.transition.damping, motion.actorArrival);
+    const damping = phaseDamping(cue.transition.damping, motion.actorArrival, motion.handoff);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     keyTarget.set(cue.palette.secondary);
     rimTarget.set(cue.palette.primary);
@@ -866,7 +925,7 @@ function CameraRig({ cue, motion }: { cue: CinematicCue; motion: StageMotionBus 
 
   useFrame(({ clock }, delta) => {
     const elapsed = clock.getElapsedTime();
-    const damping = phaseDamping(cue.transition.damping, motion.cameraArrival);
+    const damping = phaseDamping(cue.transition.damping, motion.cameraArrival, motion.handoff);
     const drift = cue.motionEnergy;
     camera.position.x = MathUtils.damp(
       camera.position.x,
@@ -913,8 +972,10 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function phaseDamping(base: number, arrival: number): number {
-  return arrival <= 0 ? 0 : base * (0.32 + arrival * 1.08);
+function phaseDamping(base: number, arrival: number, handoff: number): number {
+  const continuityArrival = handoff * 0.45;
+  const effectiveArrival = Math.max(arrival, continuityArrival);
+  return effectiveArrival <= 0 ? 0 : base * (0.32 + effectiveArrival * 1.08);
 }
 
 const worldVertexShader = /* glsl */ `
@@ -1016,7 +1077,7 @@ function StageEnvironment({ cue, motion }: { cue: CinematicCue; motion: StageMot
 
   useFrame(({ clock }, delta) => {
     if (!worldMaterialRef.current || !particleGroupRef.current || !pointsMaterialRef.current) return;
-    const damping = phaseDamping(cue.transition.damping, motion.mediaArrival);
+    const damping = phaseDamping(cue.transition.damping, motion.mediaArrival, motion.handoff);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     const elapsed = clock.getElapsedTime();
     const voice = Math.min(1.4, motion.voiceLevel + motion.voiceImpulse * 0.42 + motion.voicePeak * 0.28);
@@ -1223,7 +1284,7 @@ function SilkField({
 
   useFrame(({ clock }, delta) => {
     if (!materialRef.current || !meshRef.current) return;
-    const damping = phaseDamping(cue.transition.damping, motion.actorArrival);
+    const damping = phaseDamping(cue.transition.damping, motion.actorArrival, motion.handoff);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     paletteTargets.primary.set(cue.palette.primary);
     paletteTargets.secondary.set(cue.palette.secondary);
@@ -1358,7 +1419,7 @@ function OpticalPanel({ cue, index, motion, position, rotation }: OpticalPanelPr
   useFrame(({ clock }, delta) => {
     if (!paneRef.current || !materialRef.current) return;
     const elapsed = clock.getElapsedTime() + index * 1.7;
-    const damping = phaseDamping(cue.transition.damping, motion.actorArrival);
+    const damping = phaseDamping(cue.transition.damping, motion.actorArrival, motion.handoff);
     const energy = cue.motionEnergy;
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     paneRef.current.position.x = MathUtils.damp(
@@ -1447,7 +1508,7 @@ function HeroMonolith({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
 
   useFrame(({ clock }, delta) => {
     if (!groupRef.current) return;
-    const damping = phaseDamping(cue.transition.damping, motion.actorArrival);
+    const damping = phaseDamping(cue.transition.damping, motion.actorArrival, motion.handoff);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     groupRef.current.position.x = MathUtils.damp(
       groupRef.current.position.x,
@@ -1750,7 +1811,7 @@ function NetworkBloom({ cue, motion }: { cue: CinematicCue; motion: StageMotionB
 
   useFrame(({ clock }, delta) => {
     if (!groupRef.current || !lineMaterialRef.current || !pointsMaterialRef.current) return;
-    const damping = phaseDamping(cue.transition.damping, motion.actorArrival);
+    const damping = phaseDamping(cue.transition.damping, motion.actorArrival, motion.handoff);
     const paletteAlpha = 1 - Math.exp(-damping * delta);
     const voice = Math.min(1.4, motion.voiceLevel + motion.voiceImpulse * 0.45 + motion.voicePeak * 0.25);
     const actorPresence = MathUtils.smoothstep(cue.composition.growthScale, 0.08, 0.24);

@@ -848,12 +848,24 @@ textarea::placeholder {
   font-size: clamp(15px, 1.3vw, 18px);
   line-height: 1.46;
   animation: stageBodyEnter 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: calc(var(--cue-copy-delay, 80ms) + 180ms);
+  animation-delay: var(--cue-body-delay, 260ms);
   will-change: opacity, transform;
 }
 
 .stage-copy-current {
   z-index: 3;
+}
+
+.stage-copy-interrupted .eyebrow {
+  animation-duration: 280ms;
+}
+
+.stage-copy-interrupted .stage-copy-line > span {
+  animation-name: stageLineHandoff;
+}
+
+.stage-copy-interrupted p:not(.eyebrow) {
+  animation-duration: 360ms;
 }
 
 .stage-copy-outgoing {
@@ -1006,6 +1018,20 @@ textarea::placeholder {
     filter: blur(8px);
     transform: translate3d(var(--cue-copy-x, 0), var(--cue-copy-y, 24px), 0) scale(0.985);
   }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes stageLineHandoff {
+  from {
+    opacity: 0;
+    filter: blur(5px);
+    transform: translate3d(var(--cue-copy-x, 0), var(--cue-copy-y, 24px), 0) scale(0.99);
+  }
+  34%,
   to {
     opacity: 1;
     filter: blur(0);

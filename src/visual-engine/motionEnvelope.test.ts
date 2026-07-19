@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { decayImpulse, sampleCueMotion, samplePhaseWindow } from './motionEnvelope';
+import {
+  decayImpulse,
+  sampleCueHandoff,
+  sampleCueMotion,
+  samplePhaseWindow,
+} from './motionEnvelope';
 
 describe('motionEnvelope', () => {
   it('starts with impact and settles on the authored target', () => {
@@ -34,6 +39,38 @@ describe('motionEnvelope', () => {
 
     expect(twoHalfFrames).toBeCloseTo(oneFrame, 10);
     expect(() => decayImpulse(-1, 1 / 60)).toThrow(/non-negative finite/);
+  });
+
+  it('starts a settled or first cue without synthetic handoff momentum', () => {
+    expect(sampleCueHandoff(0, 0)).toEqual({
+      continuity: 0,
+      impactScale: 1,
+    });
+    expect(sampleCueHandoff(1, 1_200, 0.4)).toEqual({
+      continuity: 0,
+      impactScale: 1,
+    });
+  });
+
+  it('bridges interrupted cues while bounding repeated impact', () => {
+    expect(sampleCueHandoff(0.35, 420)).toEqual({
+      continuity: 0.65,
+      impactScale: 0.727,
+    });
+    expect(sampleCueHandoff(0.82, 900, 0.58)).toEqual({
+      continuity: 0.58,
+      impactScale: 0.7564,
+    });
+    expect(sampleCueHandoff(0, 16)).toEqual({
+      continuity: 0.9,
+      impactScale: 0.622,
+    });
+  });
+
+  it('rejects invalid handoff samples', () => {
+    expect(() => sampleCueHandoff(1.1, 200)).toThrow(/between zero and one/);
+    expect(() => sampleCueHandoff(0.4, -1)).toThrow(/non-negative finite/);
+    expect(() => sampleCueHandoff(0.4, 200, -0.1)).toThrow(/between zero and one/);
   });
 
   it('stages layer motion inside an authored normalized window', () => {

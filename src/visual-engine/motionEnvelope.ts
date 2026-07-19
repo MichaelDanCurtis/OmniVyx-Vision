@@ -5,6 +5,11 @@ export interface CueMotionSample {
   overshoot: number;
 }
 
+export interface CueHandoffSample {
+  continuity: number;
+  impactScale: number;
+}
+
 export type MotionPhaseWindow = readonly [start: number, end: number];
 
 export function sampleCueMotion(
@@ -40,6 +45,32 @@ export function decayImpulse(value: number, deltaSeconds: number, lambda = 5): n
 
   const next = value * Math.exp(-lambda * deltaSeconds);
   return next < 0.0001 ? 0 : next;
+}
+
+export function sampleCueHandoff(
+  previousProgress: number,
+  previousElapsedMs: number,
+  carriedContinuity = 0,
+): CueHandoffSample {
+  if (!Number.isFinite(previousProgress) || previousProgress < 0 || previousProgress > 1) {
+    throw new Error('Previous cue progress must be a finite value between zero and one.');
+  }
+  if (!Number.isFinite(previousElapsedMs) || previousElapsedMs < 0) {
+    throw new Error('Previous cue elapsed time must be a non-negative finite number.');
+  }
+  if (!Number.isFinite(carriedContinuity) || carriedContinuity < 0 || carriedContinuity > 1) {
+    throw new Error('Carried cue continuity must be a finite value between zero and one.');
+  }
+
+  const interrupted = previousElapsedMs > 0 && previousProgress < 1;
+  const continuity = interrupted
+    ? Math.min(0.9, Math.max(carriedContinuity, 1 - previousProgress))
+    : 0;
+
+  return {
+    continuity,
+    impactScale: 1 - continuity * 0.42,
+  };
 }
 
 export function samplePhaseWindow(
