@@ -8,7 +8,7 @@ import { stageEvents } from './stageScore';
 
 describe('cinematicScore', () => {
   it('versions the show document and scores every stage event exactly once', () => {
-    expect(omniVyxCinematicShow.schemaVersion).toBe(6);
+    expect(omniVyxCinematicShow.schemaVersion).toBe(7);
     expect(omniVyxCinematicShow.cueOrder).toEqual(stageEvents.map((event) => event.id));
     expect(Object.keys(omniVyxCinematicShow.cues).sort()).toEqual(
       stageEvents.map((event) => event.id).sort(),
@@ -28,6 +28,7 @@ describe('cinematicScore', () => {
         ...cue.transition.copyOffset,
         cue.transition.sweepAngle,
         cue.transition.sweepIntensity,
+        ...Object.values(cue.transition.pacing),
         ...Object.values(cue.transition.staging).flat(),
         cue.media.opacity,
         cue.media.scale,
@@ -59,6 +60,16 @@ describe('cinematicScore', () => {
       expect(cue.transition.copyDelayMs).toBeGreaterThanOrEqual(0);
       expect(cue.transition.sweepIntensity).toBeGreaterThanOrEqual(0);
       expect(cue.transition.sweepIntensity).toBeLessThanOrEqual(1.2);
+      expect(cue.transition.pacing.minimumRate).toBeGreaterThan(0);
+      expect(cue.transition.pacing.maximumRate).toBeGreaterThanOrEqual(
+        cue.transition.pacing.minimumRate,
+      );
+      expect(cue.transition.pacing.idleRate).toBeGreaterThanOrEqual(
+        cue.transition.pacing.minimumRate,
+      );
+      expect(cue.transition.pacing.idleRate).toBeLessThanOrEqual(
+        cue.transition.pacing.maximumRate,
+      );
       Object.values(cue.transition.staging).forEach(([start, end]) => {
         expect(start).toBeGreaterThanOrEqual(0);
         expect(end).toBeLessThanOrEqual(1);

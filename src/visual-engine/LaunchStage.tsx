@@ -48,6 +48,7 @@ import {
 import type { StageEventId, StageState } from './stageScore';
 import type { PresenterEnergySignal } from '../domain/presenterAudio';
 import { createOrganicNetworkGeometry } from './organicNetwork';
+import { resolveCuePace, scaleCueDuration } from './cuePacing';
 
 interface StageMotionBus extends CueMotionSample {
   actorArrival: number;
@@ -85,6 +86,15 @@ export function LaunchStage({
 }: LaunchStageProps) {
   const stageRef = useRef<HTMLElement>(null);
   const cue = getCinematicCue(state.activeEvent);
+  // Freeze the sampled presenter pace for this cue so a decaying waveform cannot retime it mid-transition.
+  const cuePace = useMemo(
+    () => resolveCuePace(
+      cue.transition.pacing,
+      presenterEnergy?.level ?? 0,
+      presenterEnergy?.peak ?? 0,
+    ),
+    [cue],
+  );
   const [performanceProfile, setPerformanceProfile] = useState({
     factor: state.quality === 'high' ? 0.72 : 0,
     fps: 0,
@@ -124,6 +134,8 @@ export function LaunchStage({
       data-lens-bokeh={cue.lens.bokehScale.toFixed(2)}
       data-lens-exposure={cue.lens.exposure.toFixed(2)}
       data-lens-focus-range={cue.lens.focusRange.toFixed(2)}
+      data-cue-effective-duration={Math.round(scaleCueDuration(cue.transition.durationMs, cuePace))}
+      data-cue-pace={cuePace.toFixed(3)}
       data-world-drift={cue.environment.drift.toFixed(2)}
       data-world-glow={cue.environment.glow.toFixed(2)}
       data-world-grid={cue.environment.grid.toFixed(2)}
@@ -136,7 +148,11 @@ export function LaunchStage({
       style={{
         '--stage-primary': cue.palette.primary,
         '--stage-accent': cue.palette.accent,
-        '--cue-panel-duration': `${clamp(cue.transition.durationMs * 0.34, 260, 520)}ms`,
+        '--cue-panel-duration': `${clamp(
+          scaleCueDuration(cue.transition.durationMs * 0.34, cuePace),
+          240,
+          620,
+        )}ms`,
       } as CSSProperties}
     >
       <Canvas
@@ -172,13 +188,14 @@ export function LaunchStage({
             effectsEnabled={effectsEnabled}
             presenterEnergy={presenterEnergy}
             presenterPulse={presenterPulse}
+            pace={cuePace}
             stageElementRef={stageRef}
             state={state}
           />
         </PerformanceMonitor>
       </Canvas>
 
-      <KineticStageCopy cue={cue} eventId={state.activeEvent} />
+      <KineticStageCopy cue={cue} eventId={state.activeEvent} pace={cuePace} />
 
       <div className="stage-performance" aria-label="Adaptive render performance">
         <span>AUTO</span>
@@ -226,22 +243,35 @@ interface CopyLayerState {
   cue: CinematicCue;
   eventId: StageEventId;
   exitDurationMs: number;
+  pace: number;
 }
 
-function KineticStageCopy({ cue, eventId }: { cue: CinematicCue; eventId: StageEventId }) {
-  const previousRef = useRef({ cue, eventId });
+function KineticStageCopy({
+  cue,
+  eventId,
+  pace,
+}: {
+  cue: CinematicCue;
+  eventId: StageEventId;
+  pace: number;
+}) {
+  const previousRef = useRef({ cue, eventId, pace });
   const [outgoing, setOutgoing] = useState<CopyLayerState | null>(null);
 
   useLayoutEffect(() => {
     const previous = previousRef.current;
-    previousRef.current = { cue, eventId };
+    previousRef.current = { cue, eventId, pace };
     if (previous.eventId === eventId) return;
 
-    const exitDurationMs = clamp(previous.cue.transition.durationMs * 0.34, 260, 560);
+    const exitDurationMs = clamp(
+      scaleCueDuration(previous.cue.transition.durationMs * 0.34, previous.pace),
+      240,
+      680,
+    );
     setOutgoing({ ...previous, exitDurationMs });
     const timer = window.setTimeout(() => setOutgoing(null), exitDurationMs);
     return () => window.clearTimeout(timer);
-  }, [cue, eventId]);
+  }, [cue, eventId, pace]);
 
   return (
     <>
@@ -252,9 +282,10 @@ function KineticStageCopy({ cue, eventId }: { cue: CinematicCue; eventId: StageE
           exitDurationMs={outgoing.exitDurationMs}
           key={`${outgoing.eventId}-out`}
           outgoing
+          pace={outgoing.pace}
         />
       ) : null}
-      <StageCopyLayer cue={cue} eventId={eventId} key={`${eventId}-in`} />
+      <StageCopyLayer cue={cue} eventId={eventId} key={`${eventId}-in`} pace={pace} />
     </>
   );
 }
@@ -264,26 +295,37 @@ function StageCopyLayer({
   eventId,
   exitDurationMs = 0,
   outgoing = false,
+  pace,
 }: {
   cue: CinematicCue;
   eventId: StageEventId;
   exitDurationMs?: number;
   outgoing?: boolean;
+  pace: number;
 }) {
   const copyWindow = cue.transition.staging.copy;
   const copyDurationMs = clamp(
-    cue.transition.durationMs * (copyWindow[1] - copyWindow[0]) * 1.25,
-    420,
-    840,
+    scaleCueDuration(
+      cue.transition.durationMs * (copyWindow[1] - copyWindow[0]) * 1.25,
+      pace,
+    ),
+    360,
+    960,
   );
-  const copyDelayMs = cue.transition.copyDelayMs
-    + cue.transition.durationMs * copyWindow[0];
+  const copyDelayMs = scaleCueDuration(
+    cue.transition.copyDelayMs + cue.transition.durationMs * copyWindow[0],
+    pace,
+  );
   const style = {
     '--cue-copy-duration': `${copyDurationMs}ms`,
     '--cue-copy-delay': `${copyDelayMs}ms`,
     '--cue-copy-x': `${cue.transition.copyOffset[0]}px`,
     '--cue-copy-y': `${cue.transition.copyOffset[1]}px`,
-    '--cue-line-stagger': `${clamp(cue.transition.durationMs * 0.055, 48, 86)}ms`,
+    '--cue-line-stagger': `${clamp(
+      scaleCueDuration(cue.transition.durationMs * 0.055, pace),
+      42,
+      96,
+    )}ms`,
     '--cue-exit-duration': `${exitDurationMs}ms`,
     '--cue-exit-x': `${cue.transition.copyOffset[0] * -0.32}px`,
     '--cue-exit-y': `${cue.transition.copyOffset[1] * -0.24 - 6}px`,
@@ -314,6 +356,7 @@ function StageCopyLayer({
 interface LaunchSceneProps {
   cue: CinematicCue;
   effectsEnabled: boolean;
+  pace: number;
   presenterEnergy?: PresenterEnergySignal;
   presenterPulse: number;
   stageElementRef: RefObject<HTMLElement | null>;
@@ -323,6 +366,7 @@ interface LaunchSceneProps {
 function LaunchScene({
   cue,
   effectsEnabled,
+  pace,
   presenterEnergy,
   presenterPulse,
   stageElementRef,
@@ -351,6 +395,7 @@ function LaunchScene({
         cue={cue}
         eventId={state.activeEvent}
         motion={motion}
+        pace={pace}
         presenterEnergy={presenterEnergy}
         presenterPulse={presenterPulse}
         stageElementRef={stageElementRef}
@@ -485,6 +530,7 @@ function MotionDirector({
   motion,
   presenterEnergy,
   presenterPulse,
+  pace,
   stageElementRef,
 }: {
   cue: CinematicCue;
@@ -492,6 +538,7 @@ function MotionDirector({
   motion: StageMotionBus;
   presenterEnergy?: PresenterEnergySignal;
   presenterPulse: number;
+  pace: number;
   stageElementRef: RefObject<HTMLElement | null>;
 }) {
   const energyReportFrameRef = useRef(0);
@@ -540,7 +587,7 @@ function MotionDirector({
       peakTarget,
       motion.voicePeak * Math.exp(-7.5 * delta),
     );
-    motion.elapsedMs += delta * 1_000;
+    motion.elapsedMs += delta * 1_000 * pace;
     motion.voiceImpulse = decayImpulse(motion.voiceImpulse, delta, 4.8);
 
     energyReportFrameRef.current = (energyReportFrameRef.current + 1) % 6;

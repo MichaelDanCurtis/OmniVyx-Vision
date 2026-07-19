@@ -1,5 +1,6 @@
 import type { StageEventId } from './stageScore';
 import type { MotionPhaseWindow } from './motionEnvelope';
+import type { CuePacingProfile } from './cuePacing';
 
 export type Vector3Tuple = readonly [number, number, number];
 export type Vector2Tuple = readonly [number, number];
@@ -23,6 +24,7 @@ export interface CinematicCue {
     copyOffset: Vector2Tuple;
     sweepAngle: number;
     sweepIntensity: number;
+    pacing: CuePacingProfile;
     staging: {
       camera: MotionPhaseWindow;
       media: MotionPhaseWindow;
@@ -83,7 +85,7 @@ export interface CinematicCue {
 }
 
 export interface CinematicShowDocument {
-  schemaVersion: 6;
+  schemaVersion: 7;
   id: string;
   title: string;
   cueOrder: readonly StageEventId[];
@@ -101,7 +103,7 @@ const cueOrder = [
 ] as const satisfies readonly StageEventId[];
 
 export const omniVyxCinematicShow: CinematicShowDocument = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   id: 'omnivyx-vision-launch',
   title: 'OmniVyx Vision',
   cueOrder,
@@ -121,6 +123,13 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [0, 36],
         sweepAngle: 0.15,
         sweepIntensity: 0.74,
+        pacing: {
+          idleRate: 0.9,
+          minimumRate: 0.82,
+          maximumRate: 1.06,
+          energyGain: 0.12,
+          peakGain: 0.05,
+        },
         staging: {
           camera: [0, 0.42],
           media: [0.02, 0.78],
@@ -190,6 +199,13 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [-72, 12],
         sweepAngle: 0,
         sweepIntensity: 0.95,
+        pacing: {
+          idleRate: 1,
+          minimumRate: 0.92,
+          maximumRate: 1.24,
+          energyGain: 0.24,
+          peakGain: 0.09,
+        },
         staging: {
           camera: [0, 0.38],
           media: [0.04, 0.72],
@@ -259,6 +275,13 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [0, 42],
         sweepAngle: 1.15,
         sweepIntensity: 0.8,
+        pacing: {
+          idleRate: 0.96,
+          minimumRate: 0.88,
+          maximumRate: 1.16,
+          energyGain: 0.16,
+          peakGain: 0.06,
+        },
         staging: {
           camera: [0, 0.46],
           media: [0.08, 0.78],
@@ -328,6 +351,13 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [46, 28],
         sweepAngle: -0.55,
         sweepIntensity: 0.88,
+        pacing: {
+          idleRate: 0.88,
+          minimumRate: 0.78,
+          maximumRate: 1.08,
+          energyGain: 0.12,
+          peakGain: 0.05,
+        },
         staging: {
           camera: [0, 0.44],
           media: [0.06, 0.82],
@@ -397,6 +427,13 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [84, 0],
         sweepAngle: 3.1416,
         sweepIntensity: 1.1,
+        pacing: {
+          idleRate: 1.06,
+          minimumRate: 0.96,
+          maximumRate: 1.32,
+          energyGain: 0.26,
+          peakGain: 0.1,
+        },
         staging: {
           camera: [0, 0.32],
           media: [0.02, 0.58],
@@ -466,6 +503,13 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [0, 14],
         sweepAngle: 1.5708,
         sweepIntensity: 0.25,
+        pacing: {
+          idleRate: 0.82,
+          minimumRate: 0.74,
+          maximumRate: 1,
+          energyGain: 0.08,
+          peakGain: 0.03,
+        },
         staging: {
           camera: [0, 0.58],
           media: [0.12, 0.9],
@@ -535,6 +579,13 @@ export const omniVyxCinematicShow: CinematicShowDocument = {
         copyOffset: [-40, 32],
         sweepAngle: 0.35,
         sweepIntensity: 1,
+        pacing: {
+          idleRate: 0.94,
+          minimumRate: 0.84,
+          maximumRate: 1.18,
+          energyGain: 0.18,
+          peakGain: 0.08,
+        },
         staging: {
           camera: [0, 0.42],
           media: [0.05, 0.76],
