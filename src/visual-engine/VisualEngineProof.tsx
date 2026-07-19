@@ -8,14 +8,23 @@ import {
   type PresenterAudioMeter,
   type PresenterEnergySignal,
 } from '../domain/presenterAudio';
-import { getSpeechRecognition, type SpeechRecognitionLike } from '../domain/speechRecognition';
+import {
+  getSpeechRecognition,
+  readSpeechRecognitionUpdate,
+  type SpeechRecognitionLike,
+} from '../domain/speechRecognition';
 import {
   acceptPresenterSignal,
   type PresenterReceipt,
 } from '../native/presenterBridge';
 import { LaunchStage } from './LaunchStage';
 import { StageControls } from './StageControls';
-import { findStageIntent, type StageIntentMatch } from './stageIntent';
+import {
+  findStageIntent,
+  findStageIntentPreview,
+  type StageIntentMatch,
+  type StageIntentPreview,
+} from './stageIntent';
 import {
   applyStageEvent,
   createInitialStageState,
@@ -36,6 +45,7 @@ export function VisualEngineProof() {
   const [transcript, setTranscript] = useState('');
   const [transcriptHistory, setTranscriptHistory] = useState<string[]>([]);
   const [lastIntent, setLastIntent] = useState<StageIntentMatch | null>(null);
+  const [previewIntent, setPreviewIntent] = useState<StageIntentPreview | null>(null);
   const [lastNativeReceipt, setLastNativeReceipt] = useState<PresenterReceipt | null>(null);
   const [listening, setListening] = useState(false);
   const [presenting, setPresenting] = useState(false);
@@ -138,6 +148,7 @@ export function VisualEngineProof() {
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
       event.preventDefault();
       pulsePresenter();
+      setPreviewIntent(null);
       setStageState((current) => {
         const order = omniVyxCinematicShow.cueOrder;
         const currentIndex = order.indexOf(current.activeEvent);
@@ -164,6 +175,7 @@ export function VisualEngineProof() {
 
   function handleEvent(eventId: StageEventId) {
     pulsePresenter();
+    setPreviewIntent(null);
     setStageState((current) => applyStageEvent(current, eventId));
   }
 
@@ -192,12 +204,30 @@ export function VisualEngineProof() {
       .catch(() => undefined);
 
     setLastIntent(intent);
+    setPreviewIntent(null);
     setTranscriptHistory((current) => [trimmed, ...current].slice(0, 4));
     setTranscript('');
 
     if (intent) {
       setStageState((current) => applyStageEvent(current, intent.eventId));
     }
+  }
+
+  function updateIntentPreview(value: string) {
+    const currentStage = stageStateRef.current;
+    const preview = findStageIntentPreview(
+      value,
+      currentStage.activeEvent,
+      currentStage.previousEvent,
+    );
+    setPreviewIntent(
+      preview && preview.eventId !== currentStage.activeEvent ? preview : null,
+    );
+  }
+
+  function handleTranscriptChange(value: string) {
+    setTranscript(value);
+    updateIntentPreview(value);
   }
 
   function toggleListening() {
@@ -211,11 +241,18 @@ export function VisualEngineProof() {
 
     const nextRecognition = new Recognition();
     nextRecognition.continuous = true;
-    nextRecognition.interimResults = false;
+    nextRecognition.interimResults = true;
     nextRecognition.onresult = (event) => {
-      const latest = event.results[event.results.length - 1];
-      const spoken = latest?.[0]?.transcript?.trim();
-      if (spoken) submitTranscript(spoken);
+      const update = readSpeechRecognitionUpdate(event);
+      if (update.finalTranscript) {
+        submitTranscript(update.finalTranscript);
+        return;
+      }
+      if (update.interimTranscript) {
+        handleTranscriptChange(update.interimTranscript);
+      } else {
+        setPreviewIntent(null);
+      }
     };
     nextRecognition.onend = () => {
       if (recognitionRef.current === nextRecognition) stopPresenterInputs(false);
@@ -262,6 +299,7 @@ export function VisualEngineProof() {
     audioMeterRef.current?.stop();
     audioMeterRef.current = null;
     resetPresenterEnergySignal(presenterEnergy);
+    setPreviewIntent(null);
     setListening(false);
   }
 
@@ -329,6 +367,7 @@ export function VisualEngineProof() {
         <LaunchStage
           presenterEnergy={presenterEnergy}
           presenterPulse={presenterPulse}
+          previewIntent={previewIntent}
           presenting={presenting}
           state={stageState}
           onTogglePresenting={togglePresentation}
@@ -338,6 +377,7 @@ export function VisualEngineProof() {
           lastIntent={lastIntent}
           lastNativeReceipt={lastNativeReceipt}
           listening={listening}
+          previewIntent={previewIntent}
           state={stageState}
           transcript={transcript}
           transcriptHistory={transcriptHistory}
@@ -345,7 +385,7 @@ export function VisualEngineProof() {
           onQuality={handleQuality}
           onSubmitTranscript={submitTranscript}
           onToggleListening={toggleListening}
-          onTranscriptChange={setTranscript}
+          onTranscriptChange={handleTranscriptChange}
         />
       </div>
     </section>

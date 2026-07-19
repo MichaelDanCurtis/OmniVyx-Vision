@@ -46,6 +46,10 @@ export interface OpticalHandoffSample {
   width: number;
 }
 
+export interface SemanticPreflightSample extends OpticalHandoffSample {
+  progress: number;
+}
+
 export type MotionPhaseWindow = readonly [start: number, end: number];
 
 export function sampleCueMotion(
@@ -134,6 +138,35 @@ export function sampleOpticalHandoff(
   const exit = 1 - smoothstep01((progress - 0.7) / 0.28);
   target.opacity = Math.min(1.2, intensity * enter * exit * (1 - continuity * 0.28));
   target.width = 1 + continuity * 0.58;
+  target.active = target.opacity > 0.003;
+  return target;
+}
+
+export function sampleSemanticPreflight(
+  anticipation: number,
+  elapsedSeconds: number,
+  intensity: number,
+  target: SemanticPreflightSample = {
+    active: false,
+    opacity: 0,
+    progress: 0.1,
+    width: 1.5,
+  },
+): SemanticPreflightSample {
+  if (!Number.isFinite(anticipation) || anticipation < 0 || anticipation > 1) {
+    throw new Error('Semantic anticipation must be a finite value between zero and one.');
+  }
+  if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) {
+    throw new Error('Semantic preflight time must be a non-negative finite number.');
+  }
+  if (!Number.isFinite(intensity) || intensity < 0) {
+    throw new Error('Semantic preflight intensity must be a non-negative finite number.');
+  }
+
+  const breath = Math.sin(elapsedSeconds * 1.35);
+  target.opacity = Math.min(0.34, anticipation * (0.16 + intensity * 0.18));
+  target.progress = 0.1 + anticipation * 0.015 + breath * 0.018;
+  target.width = 1.42 + (1 - anticipation) * 0.18 + breath * 0.04;
   target.active = target.opacity > 0.003;
   return target;
 }

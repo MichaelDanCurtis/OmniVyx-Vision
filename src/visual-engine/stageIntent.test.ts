@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findStageIntent } from './stageIntent';
+import { findStageIntent, findStageIntentPreview } from './stageIntent';
 
 describe('stageIntent', () => {
   it('maps product announcement language to the reveal event', () => {
@@ -57,5 +57,33 @@ describe('stageIntent', () => {
 
   it('returns null when the transcript has no stage intent', () => {
     expect(findStageIntent('I need to check something unrelated.', 'open_brand')).toBeNull();
+  });
+
+  it('preflights a likely product cue before the phrase is final', () => {
+    const preview = findStageIntentPreview(
+      'Today I want to introduce you to Omni',
+      'open_brand',
+    );
+
+    expect(preview?.eventId).toBe('reveal_product');
+    expect(preview?.complete).toBe(false);
+    expect(preview?.confidence).toBeGreaterThan(0.7);
+    expect(preview?.confidence).toBeLessThan(1);
+  });
+
+  it('preflights partial relative and evidence commands without committing noise', () => {
+    expect(findStageIntentPreview('Could we go to the next sl', 'reveal_product')?.eventId)
+      .toBe('explain_value');
+    expect(findStageIntentPreview('Show us the year over year pro', 'grow_system')?.eventId)
+      .toBe('summon_dynamic_chart');
+    expect(findStageIntentPreview('This thought is still forming', 'open_brand')).toBeNull();
+  });
+
+  it('marks a complete phrase as a full-confidence preview', () => {
+    expect(findStageIntentPreview('Please show the chart', 'grow_system')).toMatchObject({
+      complete: true,
+      confidence: 1,
+      eventId: 'summon_dynamic_chart',
+    });
   });
 });

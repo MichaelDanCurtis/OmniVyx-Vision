@@ -8,6 +8,7 @@ import {
   sampleCueMotion,
   sampleOpticalHandoff,
   samplePhaseWindow,
+  sampleSemanticPreflight,
 } from './motionEnvelope';
 
 describe('motionEnvelope', () => {
@@ -124,6 +125,28 @@ describe('motionEnvelope', () => {
     expect(() => sampleOpticalHandoff(-0.1, 0, 1)).toThrow(/progress/);
     expect(() => sampleOpticalHandoff(0.2, 1.1, 1)).toThrow(/continuity/);
     expect(() => sampleOpticalHandoff(0.2, 0, -1)).toThrow(/intensity/);
+  });
+
+  it('preflights a likely semantic cue as a restrained, cullable optical breath', () => {
+    const idle = sampleSemanticPreflight(0, 0, 1);
+    expect(idle.active).toBe(false);
+    expect(idle.opacity).toBe(0);
+    expect(idle.progress).toBe(0.1);
+    expect(idle.width).toBeCloseTo(1.6, 8);
+
+    const tentative = sampleSemanticPreflight(0.55, 0.4, 0.7);
+    const confident = sampleSemanticPreflight(0.9, 0.4, 1.1);
+    expect(tentative.active).toBe(true);
+    expect(confident.opacity).toBeGreaterThan(tentative.opacity);
+    expect(confident.opacity).toBeLessThanOrEqual(0.34);
+    expect(confident.progress).toBeGreaterThan(0.08);
+    expect(confident.progress).toBeLessThan(0.14);
+  });
+
+  it('rejects invalid semantic preflight samples', () => {
+    expect(() => sampleSemanticPreflight(1.1, 0, 1)).toThrow(/anticipation/);
+    expect(() => sampleSemanticPreflight(0.4, -1, 1)).toThrow(/time/);
+    expect(() => sampleSemanticPreflight(0.4, 0, -1)).toThrow(/intensity/);
   });
 
   it('shapes a camera shot through one transient arc', () => {

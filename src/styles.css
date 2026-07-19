@@ -1586,6 +1586,15 @@ textarea::placeholder {
   background: rgba(20, 184, 166, 0.07);
 }
 
+.stage-intent-note[data-preview="active"] {
+  border-color: rgba(251, 191, 36, 0.34);
+  background: rgba(251, 191, 36, 0.075);
+}
+
+.stage-intent-note[data-preview="active"] span {
+  color: #fcd34d;
+}
+
 .stage-intent-note span {
   color: #5eead4;
   font-size: 11px;

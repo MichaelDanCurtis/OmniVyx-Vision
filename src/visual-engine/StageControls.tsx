@@ -1,6 +1,6 @@
 import { Gauge, Mic, MicOff, Pause, Play, Send, Sparkles } from 'lucide-react';
 import type { PresenterReceipt } from '../native/presenterBridge';
-import type { StageIntentMatch } from './stageIntent';
+import type { StageIntentMatch, StageIntentPreview } from './stageIntent';
 import {
   getStageEventMeta,
   stageEvents,
@@ -14,6 +14,7 @@ interface StageControlsProps {
   lastIntent: StageIntentMatch | null;
   lastNativeReceipt: PresenterReceipt | null;
   listening: boolean;
+  previewIntent: StageIntentPreview | null;
   state: StageState;
   transcript: string;
   transcriptHistory: string[];
@@ -29,6 +30,7 @@ export function StageControls({
   lastIntent,
   lastNativeReceipt,
   listening,
+  previewIntent,
   state,
   transcript,
   transcriptHistory,
@@ -83,6 +85,14 @@ export function StageControls({
             <dd>{lastIntent ? `${lastIntent.label} / ${formatIntentSource(lastIntent.source)}` : 'none'}</dd>
           </div>
           <div>
+            <dt>Semantic preflight</dt>
+            <dd>
+              {previewIntent
+                ? `${previewIntent.label} / ${Math.round(previewIntent.confidence * 100)}%`
+                : 'standing by'}
+            </dd>
+          </div>
+          <div>
             <dt>Native intake</dt>
             <dd>{lastNativeReceipt ? `accepted #${lastNativeReceipt.sequence}` : 'standing by'}</dd>
           </div>
@@ -120,9 +130,17 @@ export function StageControls({
             Score cue
           </button>
         </form>
-        <div className="stage-intent-note">
-          <span>{lastIntent ? lastIntent.phrase : 'waiting for cue'}</span>
-          <strong>{lastIntent ? lastIntent.label : 'No stage intent detected'}</strong>
+        <div className="stage-intent-note" data-preview={previewIntent ? 'active' : 'idle'}>
+          <span>
+            {previewIntent
+              ? `${previewIntent.phrase} / ${Math.round(previewIntent.confidence * 100)}%`
+              : lastIntent?.phrase ?? 'waiting for cue'}
+          </span>
+          <strong>
+            {previewIntent
+              ? `Anticipating ${previewIntent.label}`
+              : lastIntent?.label ?? 'No stage intent detected'}
+          </strong>
         </div>
         {transcriptHistory.length > 0 ? (
           <ol className="stage-history-list">

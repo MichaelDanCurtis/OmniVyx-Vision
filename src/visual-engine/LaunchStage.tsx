@@ -54,6 +54,7 @@ import {
   sampleCueMotion,
   sampleOpticalHandoff,
   samplePhaseWindow,
+  sampleSemanticPreflight,
   type CueMotionSample,
 } from './motionEnvelope';
 import { CinematicMediaPlate } from './CinematicMediaPlate';
@@ -77,6 +78,7 @@ import {
   writeKineticSpeechStyle,
   type KineticSpeechStyle,
 } from './kineticCopy';
+import type { StageIntentPreview } from './stageIntent';
 
 interface StageMotionBus extends CueMotionSample {
   actorArrival: number;
@@ -85,6 +87,7 @@ interface StageMotionBus extends CueMotionSample {
   handoff: number;
   impactScale: number;
   mediaArrival: number;
+  semanticAnticipation: number;
   voiceCadence: number;
   voiceEmphasis: number;
   voiceImpulse: number;
@@ -140,6 +143,7 @@ const OPTICAL_CORE_DRAW_CALLS = 4;
 interface LaunchStageProps {
   presenterEnergy?: PresenterEnergySignal;
   presenterPulse?: number;
+  previewIntent?: StageIntentPreview | null;
   presenting?: boolean;
   state: StageState;
   onTogglePresenting?: () => void;
@@ -149,12 +153,14 @@ export function LaunchStage({
   onTogglePresenting,
   presenterEnergy,
   presenterPulse = 0,
+  previewIntent = null,
   presenting = false,
   state,
 }: LaunchStageProps) {
   const stageRef = useRef<HTMLElement>(null);
   const copyMotionRef = useRef<HTMLDivElement>(null);
   const cue = getCinematicCue(state.activeEvent);
+  const previewCue = previewIntent ? getCinematicCue(previewIntent.eventId) : null;
   const formation = getStageFormation(cue.composition.signature);
   // Freeze the sampled presenter pace for this cue so a decaying waveform cannot retime it mid-transition.
   const cuePace = useMemo(
@@ -275,6 +281,9 @@ export function LaunchStage({
       data-triangles={renderTelemetry.triangles}
       data-media-tempo={state.mediaPlaybackRate.toFixed(2)}
       data-presenter-pulse={presenterPulse}
+      data-semantic-preflight={previewIntent?.eventId ?? 'none'}
+      data-semantic-preflight-confidence={(previewIntent?.confidence ?? 0).toFixed(2)}
+      data-semantic-preflight-enabled={!reducedMotion}
       style={{
         '--stage-primary': cue.palette.primary,
         '--stage-accent': cue.palette.accent,
@@ -320,6 +329,8 @@ export function LaunchStage({
             effectsEnabled={effectsEnabled}
             presenterEnergy={presenterEnergy}
             presenterPulse={presenterPulse}
+            previewConfidence={reducedMotion ? 0 : previewIntent?.confidence ?? 0}
+            previewCue={previewCue}
             pace={cuePace}
             reducedMotion={reducedMotion}
             stageElementRef={stageRef}
@@ -602,6 +613,8 @@ interface LaunchSceneProps {
   pace: number;
   presenterEnergy?: PresenterEnergySignal;
   presenterPulse: number;
+  previewConfidence: number;
+  previewCue: CinematicCue | null;
   reducedMotion: boolean;
   stageElementRef: RefObject<HTMLElement | null>;
   state: StageState;
@@ -614,6 +627,8 @@ function LaunchScene({
   pace,
   presenterEnergy,
   presenterPulse,
+  previewConfidence,
+  previewCue,
   reducedMotion,
   stageElementRef,
   state,
@@ -625,6 +640,7 @@ function LaunchScene({
     handoff: 0,
     impactScale: 1,
     mediaArrival: 0,
+    semanticAnticipation: 0,
     progress: 0,
     arrival: 0,
     impact: 1,
@@ -648,12 +664,18 @@ function LaunchScene({
         pace={pace}
         presenterEnergy={presenterEnergy}
         presenterPulse={presenterPulse}
+        semanticPreviewConfidence={previewConfidence}
         stageElementRef={stageElementRef}
       />
       <CinematicLighting cue={cue} motion={motion} />
 
       <CameraRig cue={cue} motion={motion} />
-      <OpticalHandoff cue={cue} enabled={!reducedMotion} motion={motion} />
+      <OpticalHandoff
+        cue={cue}
+        enabled={!reducedMotion}
+        motion={motion}
+        previewCue={previewCue}
+      />
       <StageEnvironment cue={cue} motion={motion} reducedMotion={reducedMotion} />
       <CinematicMediaPlate
         cue={cue}
@@ -710,7 +732,8 @@ function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotion
         + motion.voiceLevel * 0.16
         + motion.voicePeak * 0.08
         + motion.voiceEmphasis * 0.12
-        + motion.voiceCadence * 0.035,
+        + motion.voiceCadence * 0.035
+        + motion.semanticAnticipation * 0.045,
       damping,
       delta,
     );
@@ -747,7 +770,8 @@ function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotion
       vignetteEffect.darkness,
       cue.lens.vignetteDarkness
         + motion.impact * 0.03
-        - motion.voiceLevel * 0.04,
+        - motion.voiceLevel * 0.04
+        - motion.semanticAnticipation * 0.015,
       damping,
       delta,
     );
@@ -763,7 +787,8 @@ function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotion
         + motion.impact * 0.05
         + motion.voiceLevel * 0.035
         + motion.voicePeak * 0.02
-        + motion.voiceEmphasis * 0.035,
+        + motion.voiceEmphasis * 0.035
+        + motion.semanticAnticipation * 0.012,
       damping,
       delta,
     );
@@ -792,6 +817,7 @@ function MotionDirector({
   presenterEnergy,
   presenterPulse,
   pace,
+  semanticPreviewConfidence,
   stageElementRef,
 }: {
   copyElementRef: RefObject<HTMLDivElement | null>;
@@ -801,6 +827,7 @@ function MotionDirector({
   presenterEnergy?: PresenterEnergySignal;
   presenterPulse: number;
   pace: number;
+  semanticPreviewConfidence: number;
   stageElementRef: RefObject<HTMLElement | null>;
 }) {
   const energyReportFrameRef = useRef(0);
@@ -811,6 +838,7 @@ function MotionDirector({
   const lastReportedHandoffRef = useRef(-1);
   const lastReportedPeakRef = useRef(-1);
   const lastReportedProgressRef = useRef(-1);
+  const lastReportedSemanticAnticipationRef = useRef(-1);
   const speechStyle = useMemo<KineticSpeechStyle>(() => ({
     brightness: '1.000',
     glint: '0.080',
@@ -898,6 +926,12 @@ function MotionDirector({
       cadenceTarget > motion.voiceCadence ? 7.2 : 2.2,
       delta,
     );
+    motion.semanticAnticipation = MathUtils.damp(
+      motion.semanticAnticipation,
+      semanticPreviewConfidence,
+      semanticPreviewConfidence > motion.semanticAnticipation ? 11 : 4.2,
+      delta,
+    );
     motion.elapsedMs += delta * 1_000 * pace;
     motion.handoff = decayImpulse(motion.handoff, delta, 3.2);
     motion.voiceImpulse = decayImpulse(motion.voiceImpulse, delta, 4.8);
@@ -919,6 +953,9 @@ function MotionDirector({
     ) >= 0.01;
     const cadenceChanged = Math.abs(
       motion.voiceCadence - lastReportedCadenceRef.current
+    ) >= 0.01;
+    const semanticAnticipationChanged = Math.abs(
+      motion.semanticAnticipation - lastReportedSemanticAnticipationRef.current
     ) >= 0.01;
     if ((energyChanged || peakChanged || emphasisChanged || cadenceChanged) && copyElementRef.current) {
       writeKineticSpeechStyle(
@@ -975,6 +1012,13 @@ function MotionDirector({
       stageElementRef.current.setAttribute(
         'data-presenter-cadence',
         motion.voiceCadence.toFixed(2),
+      );
+    }
+    if (semanticAnticipationChanged) {
+      lastReportedSemanticAnticipationRef.current = motion.semanticAnticipation;
+      stageElementRef.current.setAttribute(
+        'data-semantic-anticipation',
+        motion.semanticAnticipation.toFixed(2),
       );
     }
     if (
@@ -1340,10 +1384,12 @@ function OpticalHandoff({
   cue,
   enabled,
   motion,
+  previewCue,
 }: {
   cue: CinematicCue;
   enabled: boolean;
   motion: StageMotionBus;
+  previewCue: CinematicCue | null;
 }) {
   const meshRef = useRef<Mesh>(null);
   const materialRef = useRef<ShaderMaterial>(null);
@@ -1359,7 +1405,10 @@ function OpticalHandoff({
     () => ({ active: false, opacity: 0, width: 1 }),
     [],
   );
-  const signatureIndex = transitionSignatureIndex(cue.transition.signature);
+  const preflightSample = useMemo(
+    () => ({ active: false, opacity: 0, progress: 0.1, width: 1.5 }),
+    [],
+  );
   const uniforms = useMemo(() => ({
     uAccent: { value: new Color(cue.palette.accent) },
     uAngle: { value: cue.transition.sweepAngle },
@@ -1370,7 +1419,7 @@ function OpticalHandoff({
     uPrimary: { value: new Color(cue.palette.primary) },
     uProgress: { value: 0 },
     uSecondary: { value: new Color(cue.palette.secondary) },
-    uSignature: { value: signatureIndex },
+    uSignature: { value: transitionSignatureIndex(cue.transition.signature) },
     uTime: { value: 0 },
     uVoice: { value: 0 },
     uWidth: { value: 1 },
@@ -1383,21 +1432,31 @@ function OpticalHandoff({
       return;
     }
 
+    const elapsed = clock.getElapsedTime();
     sampleOpticalHandoff(
       motion.progress,
       motion.handoff,
       cue.transition.sweepIntensity,
       handoffSample,
     );
-    const paletteAlpha = 1 - Math.exp(-cue.transition.damping * delta);
-    paletteTargets.primary.set(cue.palette.primary);
-    paletteTargets.secondary.set(cue.palette.secondary);
-    paletteTargets.accent.set(cue.palette.accent);
+    const semanticCue = previewCue ?? cue;
+    sampleSemanticPreflight(
+      motion.semanticAnticipation,
+      elapsed,
+      semanticCue.transition.sweepIntensity,
+      preflightSample,
+    );
+    const preflightActive = !handoffSample.active && preflightSample.active;
+    const opticalCue = preflightActive ? semanticCue : cue;
+    const paletteAlpha = 1 - Math.exp(-opticalCue.transition.damping * delta);
+    paletteTargets.primary.set(opticalCue.palette.primary);
+    paletteTargets.secondary.set(opticalCue.palette.secondary);
+    paletteTargets.accent.set(opticalCue.palette.accent);
     materialRef.current.uniforms.uPrimary.value.lerp(paletteTargets.primary, paletteAlpha);
     materialRef.current.uniforms.uSecondary.value.lerp(paletteTargets.secondary, paletteAlpha);
     materialRef.current.uniforms.uAccent.value.lerp(paletteTargets.accent, paletteAlpha);
-    meshRef.current.visible = handoffSample.active;
-    if (!handoffSample.active) return;
+    meshRef.current.visible = handoffSample.active || preflightActive;
+    if (!meshRef.current.visible) return;
 
     const perspectiveCamera = camera as PerspectiveCamera;
     const distance = 0.8;
@@ -1408,32 +1467,43 @@ function OpticalHandoff({
     meshRef.current.translateZ(-distance);
     meshRef.current.scale.set(viewWidth * 0.54, viewHeight * 0.54, 1);
 
-    materialRef.current.uniforms.uAngle.value = cue.transition.sweepAngle;
+    materialRef.current.uniforms.uAngle.value = opticalCue.transition.sweepAngle;
     materialRef.current.uniforms.uAspect.value = size.width / size.height;
     const portraitMix = 1 - MathUtils.smoothstep(size.width / size.height, 0.72, 1.25);
     materialRef.current.uniforms.uFocus.value.x = MathUtils.lerp(
-      cue.lighting.focus[0],
+      opticalCue.lighting.focus[0],
       0.52,
       portraitMix,
     );
     materialRef.current.uniforms.uFocus.value.y = MathUtils.lerp(
-      cue.lighting.focus[1],
+      opticalCue.lighting.focus[1],
       0.56,
       portraitMix,
     );
-    materialRef.current.uniforms.uImpact.value = motion.impact;
-    materialRef.current.uniforms.uOpacity.value = handoffSample.opacity;
-    materialRef.current.uniforms.uProgress.value = motion.progress;
-    materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
-    materialRef.current.uniforms.uSignature.value = signatureIndex;
+    materialRef.current.uniforms.uImpact.value = handoffSample.active
+      ? motion.impact
+      : motion.semanticAnticipation * 0.12;
+    materialRef.current.uniforms.uOpacity.value = handoffSample.active
+      ? handoffSample.opacity
+      : preflightSample.opacity;
+    materialRef.current.uniforms.uProgress.value = handoffSample.active
+      ? motion.progress
+      : preflightSample.progress;
+    materialRef.current.uniforms.uTime.value = elapsed;
+    materialRef.current.uniforms.uSignature.value = transitionSignatureIndex(
+      opticalCue.transition.signature,
+    );
     materialRef.current.uniforms.uVoice.value = Math.min(
       1.4,
       motion.voiceLevel
         + motion.voiceImpulse * 0.48
         + motion.voicePeak * 0.22
-        + motion.voiceEmphasis * 0.32,
+        + motion.voiceEmphasis * 0.32
+        + motion.semanticAnticipation * 0.18,
     );
-    materialRef.current.uniforms.uWidth.value = handoffSample.width;
+    materialRef.current.uniforms.uWidth.value = handoffSample.active
+      ? handoffSample.width
+      : preflightSample.width;
   });
 
   return (
@@ -1486,7 +1556,10 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
     if (ambientRef.current) {
       ambientRef.current.intensity = MathUtils.damp(
         ambientRef.current.intensity,
-        cue.lighting.ambient + motion.impact * 0.025 + motion.voiceLevel * 0.035,
+        cue.lighting.ambient
+          + motion.impact * 0.025
+          + motion.voiceLevel * 0.035
+          + motion.semanticAnticipation * 0.01,
         damping,
         delta,
       );
@@ -1497,7 +1570,8 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
         cue.lighting.key
           + motion.impact * 0.28
           + motion.voiceEmphasis * 0.22
-          + motion.voiceCadence * 0.08,
+          + motion.voiceCadence * 0.08
+          + motion.semanticAnticipation * 0.08,
         damping,
         delta,
       );
@@ -1538,7 +1612,8 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
           + motion.voiceLevel * 1.15
           + motion.voicePeak * 0.28
           + motion.voiceEmphasis * 0.8
-          + motion.voiceCadence * 0.28,
+          + motion.voiceCadence * 0.28
+          + motion.semanticAnticipation * 0.22,
         damping,
         delta,
       );
@@ -1565,7 +1640,8 @@ function CinematicLighting({ cue, motion }: { cue: CinematicCue; motion: StageMo
           + motion.voiceLevel * 0.92
           + motion.voicePeak * 0.38
           + motion.voiceEmphasis * 1.1
-          + motion.voiceCadence * 0.35,
+          + motion.voiceCadence * 0.35
+          + motion.semanticAnticipation * 0.28,
         damping,
         delta,
       );
