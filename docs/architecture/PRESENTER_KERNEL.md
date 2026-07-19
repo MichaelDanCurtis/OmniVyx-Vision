@@ -42,9 +42,27 @@ Supported signal kinds are:
 
 The current React proof submits transcript or intent signals through this contract. In a browser, the bridge resolves to a no-op fallback. In the Tauri app, Rust accepts and sequences the signal.
 
+## Cinematic Show Document
+
+`src/visual-engine/cinematicScore.ts` is the versioned visual contract for the current launch performance. Every accepted stage event resolves to one cue containing:
+
+- authored copy and semantic emphasis;
+- camera position, target, field of view, and transition character;
+- product core, organic system, dynamic slot, glass, and video composition targets;
+- key, rim, and accent light levels;
+- continuous motion energy.
+
+Stage components consume those targets with frame-rate-independent exponential damping. Cue handlers never mutate Three.js objects directly and render-loop code does not allocate target vectors per frame.
+
+## Render Quality Contract
+
+High quality is adaptive rather than a fixed pixel ratio. The stage measures sustained frame performance, selects a bounded device pixel ratio, and temporarily regresses resolution during scored transitions. The manual low-quality gate remains available as a deterministic fallback and disables post-processing.
+
+The operator preview uses a stable aspect ratio. Presentation view expands the same stage to the full native window, hides operator controls and telemetry, advances authored cues with left and right arrow keys, and exits with Escape. Speech and native semantic signals continue to use the same event path in both views.
+
 ## Build Order
 
-1. Versioned show document and deterministic show runtime.
+1. Expand the versioned cinematic show document into persisted authoring and rehearsal documents.
 2. Native microphone capture and audio-level telemetry.
 3. Apple SpeechAnalyzer adapter with partial and final transcript channels.
 4. Local semantic candidate engine with confidence, hysteresis, and cooldown controls.

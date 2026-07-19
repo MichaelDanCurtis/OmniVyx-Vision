@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useReducer, useState } from 'react';
 import { Cpu, Mic, MicOff, RotateCcw, Send } from 'lucide-react';
 import { Controls } from './components/Controls';
 import { CuePanel } from './components/CuePanel';
@@ -11,7 +11,10 @@ import {
   getPresenterCapabilities,
   type PresenterCapabilities,
 } from './native/presenterBridge';
-import { VisualEngineProof } from './visual-engine/VisualEngineProof';
+
+const VisualEngineProof = lazy(() => import('./visual-engine/VisualEngineProof').then((module) => ({
+  default: module.VisualEngineProof,
+})));
 
 export function App() {
   const [surface, setSurface] = useState<'visual-engine' | 'presenter'>('visual-engine');
@@ -61,7 +64,11 @@ export function App() {
         </div>
       </header>
 
-      {surface === 'visual-engine' ? <VisualEngineProof /> : <PresenterMvp />}
+      {surface === 'visual-engine' ? (
+        <Suspense fallback={<section className="visual-engine-loading" aria-label="Loading visual engine" />}>
+          <VisualEngineProof />
+        </Suspense>
+      ) : <PresenterMvp />}
     </main>
   );
 }

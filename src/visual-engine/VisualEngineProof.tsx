@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getSpeechRecognition, type SpeechRecognitionLike } from '../domain/speechRecognition';
 import {
   acceptPresenterSignal,
@@ -14,6 +14,7 @@ import {
   type StageEventId,
   type StageQuality,
 } from './stageScore';
+import { omniVyxCinematicShow } from './cinematicScore';
 
 export function VisualEngineProof() {
   const [stageState, setStageState] = useState(createInitialStageState);
@@ -23,7 +24,30 @@ export function VisualEngineProof() {
   const [lastNativeReceipt, setLastNativeReceipt] = useState<PresenterReceipt | null>(null);
   const [listening, setListening] = useState(false);
   const [recognition, setRecognition] = useState<SpeechRecognitionLike | null>(null);
+  const [presenting, setPresenting] = useState(false);
   const canUseMic = typeof window !== 'undefined' && getSpeechRecognition() !== null;
+
+  useEffect(() => {
+    if (!presenting) return undefined;
+    const handlePresentationKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPresenting(false);
+        return;
+      }
+
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      setStageState((current) => {
+        const order = omniVyxCinematicShow.cueOrder;
+        const currentIndex = order.indexOf(current.activeEvent);
+        const direction = event.key === 'ArrowRight' ? 1 : -1;
+        const nextIndex = Math.min(order.length - 1, Math.max(0, currentIndex + direction));
+        return applyStageEvent(current, order[nextIndex]);
+      });
+    };
+    window.addEventListener('keydown', handlePresentationKey);
+    return () => window.removeEventListener('keydown', handlePresentationKey);
+  }, [presenting]);
 
   function handleEvent(eventId: StageEventId) {
     setStageState((current) => applyStageEvent(current, eventId));
@@ -90,9 +114,13 @@ export function VisualEngineProof() {
   }
 
   return (
-    <section className="visual-engine-proof">
+    <section className={presenting ? 'visual-engine-proof presenting' : 'visual-engine-proof'}>
       <div className="visual-engine-layout">
-        <LaunchStage state={stageState} />
+        <LaunchStage
+          presenting={presenting}
+          state={stageState}
+          onTogglePresenting={() => setPresenting((current) => !current)}
+        />
         <StageControls
           canUseMic={canUseMic}
           lastIntent={lastIntent}

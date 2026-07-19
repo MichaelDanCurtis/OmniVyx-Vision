@@ -1,10 +1,18 @@
+import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DoubleSide, SRGBColorSpace, VideoTexture } from 'three';
+import {
+  DoubleSide,
+  MathUtils,
+  MeshBasicMaterial,
+  SRGBColorSpace,
+  VideoTexture,
+} from 'three';
 
 interface VideoLayerProps {
   src: string;
   playbackRate: number;
   opacity?: number;
+  transitionDamping?: number;
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: [number, number, number];
@@ -14,11 +22,14 @@ export function VideoLayer({
   src,
   playbackRate,
   opacity = 0.78,
+  transitionDamping = 4,
   position = [0, 0, 0],
   rotation = [0, 0, 0],
   scale = [1, 1, 1],
 }: VideoLayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const materialRef = useRef<MeshBasicMaterial>(null);
+  const initialOpacity = useRef(opacity);
   const [texture, setTexture] = useState<VideoTexture | null>(null);
 
   useEffect(() => {
@@ -35,7 +46,7 @@ export function VideoLayer({
     nextTexture.colorSpace = SRGBColorSpace;
     videoRef.current = video;
     setTexture(nextTexture);
-    void video.play();
+    void video.play().catch(() => undefined);
 
     return () => {
       nextTexture.dispose();
@@ -49,26 +60,34 @@ export function VideoLayer({
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.playbackRate = playbackRate;
-      if (videoRef.current.paused) void videoRef.current.play();
+      if (videoRef.current.paused) void videoRef.current.play().catch(() => undefined);
     }
   }, [playbackRate]);
 
   const fallbackColor = useMemo(() => (texture ? '#ffffff' : '#1f3f54'), [texture]);
 
+  useFrame((_, delta) => {
+    if (!materialRef.current) return;
+    materialRef.current.opacity = MathUtils.damp(
+      materialRef.current.opacity,
+      opacity,
+      transitionDamping,
+      delta,
+    );
+  });
+
   return (
     <mesh position={position} rotation={rotation} scale={scale}>
       <planeGeometry args={[3.4, 1.9, 32, 16]} />
-      {texture ? (
-        <meshBasicMaterial
-          map={texture}
-          opacity={opacity}
-          side={DoubleSide}
-          toneMapped={false}
-          transparent
-        />
-      ) : (
-        <meshBasicMaterial color={fallbackColor} opacity={0.28} side={DoubleSide} transparent />
-      )}
+      <meshBasicMaterial
+        ref={materialRef}
+        color={fallbackColor}
+        map={texture}
+        opacity={initialOpacity.current}
+        side={DoubleSide}
+        toneMapped={false}
+        transparent
+      />
     </mesh>
   );
 }
