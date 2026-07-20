@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { DepthOfField, EffectComposer } from '@react-three/postprocessing';
-import { AdaptiveDpr, PerformanceMonitor, RoundedBox } from '@react-three/drei';
+import { PerformanceMonitor, RoundedBox } from '@react-three/drei';
 import { Maximize2, Minimize2 } from 'lucide-react';
 import { BlendFunction, BloomEffect, VignetteEffect } from 'postprocessing';
 import {
@@ -227,7 +227,8 @@ export function LaunchStage({
       className="visual-engine-stage"
       data-stage-event={state.activeEvent}
       data-quality={state.quality}
-      data-dpr-mode={state.quality === 'high' ? 'adaptive' : 'fixed'}
+      data-dpr-mode={state.quality === 'high' ? 'calibrated' : 'fixed'}
+      data-dpr-transition-policy="locked"
       data-render-scale={adaptiveDpr.toFixed(2)}
       data-reduced-motion={reducedMotion}
       data-fps={measuredFps}
@@ -330,8 +331,6 @@ export function LaunchStage({
             ));
           }}
         >
-          {state.quality === 'high' ? <AdaptiveDpr /> : null}
-          <TransitionPerformanceRegressor eventId={state.activeEvent} />
           <RenderTelemetryProbe effectsEnabled={effectsEnabled} onChange={setRenderTelemetry} />
           <LaunchScene
             copyElementRef={copyMotionRef}
@@ -1065,16 +1064,6 @@ function MotionDirector({
       }
     }
   });
-
-  return null;
-}
-
-function TransitionPerformanceRegressor({ eventId }: { eventId: StageEventId }) {
-  const regress = useThree((threeState) => threeState.performance.regress);
-
-  useEffect(() => {
-    regress();
-  }, [eventId, regress]);
 
   return null;
 }

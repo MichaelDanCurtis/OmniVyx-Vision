@@ -91,7 +91,7 @@ The renderer interprets transition values as masked kinetic typography plus a on
 
 ## Render Quality Contract
 
-High quality is adaptive rather than a fixed pixel ratio. The stage measures sustained frame performance, selects a bounded device pixel ratio, and temporarily regresses resolution during scored transitions. The manual low-quality gate is a deterministic fallback: it removes the adaptive-DPR controller, fixes renderer DPR at `1.0`, disables post-processing, and fades the media plate out of the draw list.
+High quality is calibrated rather than a fixed pixel ratio. The stage measures sustained frame performance and selects a bounded device pixel ratio, but cue changes keep that ratio locked so a transition never resizes the framebuffer. The manual low-quality gate is a deterministic fallback: it fixes renderer DPR at `1.0`, disables post-processing, and fades the media plate out of the draw list. Runtime attributes expose the calibrated ratio and the locked transition policy.
 
 High quality also has a temporal optical-stability contract. The bloom pass uses a feathered `0.46` luminance gate with `0.18` smoothing, while the rotating faceted prism keeps at least `0.17` roughness and a capped `0.72` emissive response. Presenter energy can still lift the hero, but specular rotation cannot cross a near-black bloom threshold and create a one-frame flare. Runtime attributes expose the bloom threshold, smoothing, and prism roughness floor for projector audits; focused tests pin the limits independently of the cue score.
 
