@@ -79,6 +79,13 @@ import {
   type KineticSpeechStyle,
 } from './kineticCopy';
 import type { StageIntentPreview } from './stageIntent';
+import {
+  CINEMATIC_BLOOM_SMOOTHING,
+  CINEMATIC_BLOOM_THRESHOLD,
+  PRISM_ROUGHNESS_FLOOR,
+  resolvePrismEmissiveIntensity,
+  resolvePrismRoughness,
+} from './opticalStability';
 
 interface StageMotionBus extends CueMotionSample {
   actorArrival: number;
@@ -227,6 +234,8 @@ export function LaunchStage({
       data-frame-p95={renderTelemetry.frameTimeP95}
       data-long-frames={renderTelemetry.longFrames}
       data-lens-bloom={cue.lens.bloom.toFixed(2)}
+      data-lens-bloom-smoothing={CINEMATIC_BLOOM_SMOOTHING.toFixed(2)}
+      data-lens-bloom-threshold={CINEMATIC_BLOOM_THRESHOLD.toFixed(2)}
       data-lens-bokeh={cue.lens.bokehScale.toFixed(2)}
       data-lens-exposure={cue.lens.exposure.toFixed(2)}
       data-lens-focus-distance={settledFocusDistance.toFixed(2)}
@@ -254,6 +263,7 @@ export function LaunchStage({
       data-silk-profile="anisotropic-weave-v2"
       data-optical-core-draws={OPTICAL_CORE_DRAW_CALLS}
       data-optical-core-fins={OPTICAL_CORE_FIN_LAYOUT.length}
+      data-optical-prism-roughness-floor={PRISM_ROUGHNESS_FLOOR.toFixed(2)}
       data-optical-handoff-budget="1"
       data-optical-handoff-enabled={!reducedMotion}
       data-organic-nodes={ORGANIC_NETWORK_NODE_COUNT}
@@ -703,7 +713,8 @@ function CinematicPost({ cue, motion }: { cue: CinematicCue; motion: StageMotion
     () => new BloomEffect({
       blendFunction: BlendFunction.ADD,
       intensity: 0.42,
-      luminanceThreshold: 0.28,
+      luminanceSmoothing: CINEMATIC_BLOOM_SMOOTHING,
+      luminanceThreshold: CINEMATIC_BLOOM_THRESHOLD,
       mipmapBlur: true,
     }),
     [],
@@ -3406,19 +3417,20 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
     if (prismMaterialRef.current) {
       prismMaterialRef.current.emissiveIntensity = MathUtils.damp(
         prismMaterialRef.current.emissiveIntensity,
-        0.16
-          + motion.impact * 0.72
-          + motion.voiceImpulse * 0.46
-          + motion.voiceLevel * 0.55
-          + motion.voicePeak * 0.22
-          + motion.voiceEmphasis * 0.62
-          + motion.voiceCadence * 0.18,
+        resolvePrismEmissiveIntensity(
+          motion.impact,
+          motion.voiceImpulse,
+          motion.voiceLevel,
+          motion.voicePeak,
+          motion.voiceEmphasis,
+          motion.voiceCadence,
+        ),
         damping,
         delta,
       );
       prismMaterialRef.current.roughness = MathUtils.damp(
         prismMaterialRef.current.roughness,
-        0.11 - cue.motionEnergy * 0.025 - motion.impact * 0.018,
+        resolvePrismRoughness(cue.motionEnergy, motion.impact),
         damping,
         delta,
       );
@@ -3455,7 +3467,10 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
     );
     faceUniformValues.uImpact.value = MathUtils.damp(
       faceUniformValues.uImpact.value,
-      motion.impact + motion.voiceImpulse * 0.52 + motion.voiceEmphasis * 0.38,
+      Math.min(
+        1,
+        motion.impact + motion.voiceImpulse * 0.42 + motion.voiceEmphasis * 0.28,
+      ),
       damping,
       delta,
     );
@@ -3581,16 +3596,16 @@ function HeroOpticalCore({ cue, motion }: { cue: CinematicCue; motion: StageMoti
         <meshPhysicalMaterial
           ref={prismMaterialRef}
           clearcoat={1}
-          clearcoatRoughness={0.04}
+          clearcoatRoughness={0.12}
           color={cue.palette.accent}
           emissive={cue.palette.accent}
-          emissiveIntensity={0.16}
+          emissiveIntensity={0.11}
           flatShading
           iridescence={0.68}
           iridescenceIOR={1.44}
           iridescenceThicknessRange={[180, 520]}
-          metalness={0.72}
-          roughness={0.09}
+          metalness={0.62}
+          roughness={0.205}
         />
       </mesh>
     </group>
