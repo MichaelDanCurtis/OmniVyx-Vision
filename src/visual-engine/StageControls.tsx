@@ -1,5 +1,6 @@
 import { Gauge, Mic, MicOff, Pause, Play, Send, Sparkles } from 'lucide-react';
-import type { StageIntentMatch } from './stageIntent';
+import type { PresenterReceipt } from '../native/presenterBridge';
+import type { StageIntentMatch, StageIntentPreview } from './stageIntent';
 import {
   getStageEventMeta,
   stageEvents,
@@ -11,7 +12,9 @@ import {
 interface StageControlsProps {
   canUseMic: boolean;
   lastIntent: StageIntentMatch | null;
+  lastNativeReceipt: PresenterReceipt | null;
   listening: boolean;
+  previewIntent: StageIntentPreview | null;
   state: StageState;
   transcript: string;
   transcriptHistory: string[];
@@ -25,7 +28,9 @@ interface StageControlsProps {
 export function StageControls({
   canUseMic,
   lastIntent,
+  lastNativeReceipt,
   listening,
+  previewIntent,
   state,
   transcript,
   transcriptHistory,
@@ -68,8 +73,8 @@ export function StageControls({
             <dd>{getStageEventMeta(state.activeEvent).label}</dd>
           </div>
           <div>
-            <dt>Video speed</dt>
-            <dd>{state.videoPlaybackRate.toFixed(2)}x</dd>
+            <dt>Media tempo</dt>
+            <dd>{state.mediaPlaybackRate.toFixed(2)}x</dd>
           </div>
           <div>
             <dt>Dynamic slot</dt>
@@ -78,6 +83,18 @@ export function StageControls({
           <div>
             <dt>Last intent</dt>
             <dd>{lastIntent ? `${lastIntent.label} / ${formatIntentSource(lastIntent.source)}` : 'none'}</dd>
+          </div>
+          <div>
+            <dt>Semantic preflight</dt>
+            <dd>
+              {previewIntent
+                ? `${previewIntent.label} / ${Math.round(previewIntent.confidence * 100)}%`
+                : 'standing by'}
+            </dd>
+          </div>
+          <div>
+            <dt>Native intake</dt>
+            <dd>{lastNativeReceipt ? `accepted #${lastNativeReceipt.sequence}` : 'standing by'}</dd>
           </div>
         </dl>
       </section>
@@ -113,9 +130,17 @@ export function StageControls({
             Score cue
           </button>
         </form>
-        <div className="stage-intent-note">
-          <span>{lastIntent ? lastIntent.phrase : 'waiting for cue'}</span>
-          <strong>{lastIntent ? lastIntent.label : 'No stage intent detected'}</strong>
+        <div className="stage-intent-note" data-preview={previewIntent ? 'active' : 'idle'}>
+          <span>
+            {previewIntent
+              ? `${previewIntent.phrase} / ${Math.round(previewIntent.confidence * 100)}%`
+              : lastIntent?.phrase ?? 'waiting for cue'}
+          </span>
+          <strong>
+            {previewIntent
+              ? `Anticipating ${previewIntent.label}`
+              : lastIntent?.label ?? 'No stage intent detected'}
+          </strong>
         </div>
         {transcriptHistory.length > 0 ? (
           <ol className="stage-history-list">

@@ -1,0 +1,67 @@
+import { describe, expect, it } from 'vitest';
+import {
+  buildKineticHeadline,
+  normalizeKineticWord,
+  resolveKineticSpeechStyle,
+  writeKineticSpeechStyle,
+} from './kineticCopy';
+
+describe('buildKineticHeadline', () => {
+  it('preserves authored lines while assigning a continuous word sequence', () => {
+    const lines = buildKineticHeadline(['The stage is', 'listening.']);
+
+    expect(lines.map((line) => line.words.map((word) => word.text).join(' '))).toEqual([
+      'The stage is',
+      'listening.',
+    ]);
+    expect(lines.flatMap((line) => line.words.map((word) => word.globalIndex))).toEqual([
+      0,
+      1,
+      2,
+      3,
+    ]);
+  });
+
+  it('normalizes incidental whitespace without creating empty animated words', () => {
+    const [line] = buildKineticHeadline(['  Intent   becomes motion.  ']);
+
+    expect(line.words.map((word) => word.text)).toEqual(['Intent', 'becomes', 'motion.']);
+    expect(line.words.map((word) => word.index)).toEqual([0, 1, 2]);
+  });
+
+  it('marks authored emphasis words after normalizing case and punctuation', () => {
+    const lines = buildKineticHeadline(
+      ['The numbers', 'arrive on cue.'],
+      ['NUMBERS', 'cue'],
+    );
+
+    expect(lines.flatMap((line) => line.words).filter((word) => word.emphasized)
+      .map((word) => word.text)).toEqual(['numbers', 'cue.']);
+    expect(normalizeKineticWord('Performed.')).toBe('performed');
+  });
+});
+
+describe('resolveKineticSpeechStyle', () => {
+  it('keeps an idle presenter optically quiet', () => {
+    expect(resolveKineticSpeechStyle(0, 0)).toEqual({
+      brightness: '1.000',
+      glint: '0.080',
+      glintPosition: '34%',
+      lift: '0.0000em',
+      scale: '1.0000',
+    });
+  });
+
+  it('bounds the maximum live response while reusing the render-loop sample', () => {
+    const sample = resolveKineticSpeechStyle(0, 0);
+
+    expect(writeKineticSpeechStyle(2, 4, sample, 3, 2)).toBe(sample);
+    expect(sample).toEqual({
+      brightness: '1.240',
+      glint: '0.620',
+      glintPosition: '74%',
+      lift: '-0.0240em',
+      scale: '1.0100',
+    });
+  });
+});

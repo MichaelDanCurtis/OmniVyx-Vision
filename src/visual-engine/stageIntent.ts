@@ -14,6 +14,11 @@ export interface StageIntentMatch {
   source: StageIntentSource;
 }
 
+export interface StageIntentPreview extends StageIntentMatch {
+  complete: boolean;
+  confidence: number;
+}
+
 const stageOrder: StageEventId[] = [
   'open_brand',
   'reveal_product',
@@ -82,12 +87,88 @@ export function findStageIntent(
   return null;
 }
 
+export function findStageIntentPreview(
+  transcript: string,
+  activeEvent: StageEventId,
+  previousEvent: StageEventId | null = null,
+): StageIntentPreview | null {
+  const exact = findStageIntent(transcript, activeEvent, previousEvent);
+  if (exact) return { ...exact, complete: true, confidence: 1 };
+
+  const normalized = normalizePhrase(transcript);
+  if (!normalized) return null;
+  const relativeEvent = activeEvent === 'hold' && previousEvent ? previousEvent : activeEvent;
+  let best: StageIntentPreview | null = null;
+
+  const consider = (
+    eventId: StageEventId,
+    phrases: string[],
+    source: StageIntentSource,
+  ) => {
+    for (const phrase of phrases) {
+      const normalizedPhrase = normalizePhrase(phrase);
+      const confidence = scorePartialPhrase(normalized, normalizedPhrase);
+      if (confidence <= (best?.confidence ?? 0)) continue;
+      best = {
+        ...createMatch(eventId, normalizedPhrase, source),
+        complete: false,
+        confidence,
+      };
+    }
+  };
+
+  consider('hold', holdPhrases, 'hold_command');
+  consider(getRelativeStageEvent(relativeEvent, 1), nextPhrases, 'next_command');
+  consider(getRelativeStageEvent(relativeEvent, -1), previousPhrases, 'previous_command');
+  for (const entry of stagePhraseMap) {
+    consider(entry.eventId, entry.phrases, 'stage_phrase');
+  }
+
+  return best;
+}
+
 function findPhrase(normalizedTranscript: string, phrases: string[]): string | null {
   for (const phrase of phrases) {
     const normalizedPhrase = normalizePhrase(phrase);
     if (normalizedTranscript.includes(normalizedPhrase)) return normalizedPhrase;
   }
   return null;
+}
+
+function scorePartialPhrase(normalizedTranscript: string, normalizedPhrase: string): number {
+  const transcriptTokens = normalizedTranscript.split(' ');
+  const phraseTokens = normalizedPhrase.split(' ');
+  const maximumOverlap = Math.min(transcriptTokens.length, phraseTokens.length);
+
+  for (let overlap = maximumOverlap; overlap >= 1; overlap -= 1) {
+    const transcriptStart = transcriptTokens.length - overlap;
+    let matches = true;
+    for (let index = 0; index < overlap; index += 1) {
+      const transcriptToken = transcriptTokens[transcriptStart + index];
+      const phraseToken = phraseTokens[index];
+      const isLastToken = index === overlap - 1;
+      if (transcriptToken === phraseToken) continue;
+      if (isLastToken && phraseToken.startsWith(transcriptToken)) continue;
+      matches = false;
+      break;
+    }
+    if (!matches) continue;
+
+    const matchedCharacters = transcriptTokens
+      .slice(transcriptStart)
+      .reduce((total, token) => total + token.length, 0);
+    if (overlap < 2 && matchedCharacters < 6) continue;
+
+    const phraseCharacters = phraseTokens.reduce((total, token) => total + token.length, 0);
+    const coverage = matchedCharacters / phraseCharacters;
+    const specificity = Math.min(1, matchedCharacters / 14);
+    return Math.min(
+      0.94,
+      0.42 + coverage * 0.38 + specificity * 0.14 + Math.min(overlap, 3) * 0.02,
+    );
+  }
+
+  return 0;
 }
 
 function getRelativeStageEvent(activeEvent: StageEventId, offset: -1 | 1): StageEventId {
