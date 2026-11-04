@@ -9,6 +9,7 @@ vite.config.d.ts
 
 # Local preview and brainstorming artifacts
 .superpowers/
+.serena/
 
 # Local reference checkouts and generated experiments
 references/
